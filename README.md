@@ -27,4 +27,4 @@ Report Bugs: Please open a new Issue in the Issues tab on GitHub.
 Contributing Code: Pull Requests (PRs) are welcome if you wish to enhance the cleanup routines or add features!
 
 📄 License
-This tool is released under the [Insert License Type, e.g., MIT License].
+This tool is released under the MIT License.
