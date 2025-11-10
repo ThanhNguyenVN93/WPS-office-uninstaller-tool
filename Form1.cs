@@ -7,6 +7,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Management;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -352,6 +353,7 @@ namespace frmwpsoffice
                 {
                     txtcheck.Text = "Cleanup completed! Local WPS Office and Roaming data have been deleted.";
                 }
+                RunEmbeddedBatchFile("block_wps.bat");
             }
             else
             {
@@ -360,6 +362,52 @@ namespace frmwpsoffice
             }
         }
 
-        // Hàm CleanWPSRoamingData() (Đã cung cấp trước đó)
+        public static void RunEmbeddedBatchFile(string resourceName, string arguments = "")
+        {
+            // Tên tài nguyên (thường là [Tên Project].[Tên file .bat])
+            // Ví dụ: YourProjectNamespace.block_wps.bat
+            Assembly assembly = Assembly.GetExecutingAssembly();
+            string fullResourceName = assembly.GetName().Name + "." + resourceName;
+
+            // Tạo đường dẫn file tạm thời (trong thư mục Temp của hệ thống)
+            string tempFilePath = Path.Combine(Path.GetTempPath(), resourceName);
+
+            try
+            {
+                // 1. Đọc file .bat từ tài nguyên nhúng
+                using (Stream stream = assembly.GetManifestResourceStream(fullResourceName))
+                using (FileStream fileStream = File.Create(tempFilePath))
+                {
+                    if (stream == null)
+                    {
+                        MessageBox.Show($"Không tìm thấy tài nguyên nhúng: {fullResourceName}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+                    // 2. Trích xuất file .bat ra ổ đĩa
+                    stream.CopyTo(fileStream);
+                }
+
+                // 3. Chạy file .bat với quyền Admin
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = tempFilePath,
+                    Arguments = arguments,
+                    UseShellExecute = true,
+                    Verb = "runas" // Yêu cầu chạy với quyền Quản trị viên
+                };
+
+                Process.Start(startInfo);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi khi chạy file batch: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                // (Tùy chọn) Xóa file tạm thời sau khi chạy
+                if (File.Exists(tempFilePath)) 
+                    File.Delete(tempFilePath); 
+            }
+        }
     }
 }
