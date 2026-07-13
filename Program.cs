@@ -16,6 +16,10 @@ namespace frmwpsoffice
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            if (!NetFrameworkCheck.EnsureInstalled())
+                return;
+
             Application.Run(new Form1());
         }
     }
