@@ -15,11 +15,18 @@ jobs:
           Get-ChildItem -Filter *.sln -Recurse | ForEach-Object { nuget restore $_.FullName }
         shell: pwsh
       - name: Build
+        env:
+          # GitHub hosted windows-latest runners do not ship reference
+          # assemblies for every old .NETFramework target version these
+          # projects use (v4.5.2-v4.7.2) - only the latest Developer Pack
+          # (v4.8) is preinstalled. Overriding the framework path to it
+          # keeps old-TFM projects buildable without installing more packs.
+          FX_REF: C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8
         run: |
           $sln = Get-ChildItem -Filter *.sln -Recurse | Select-Object -First 1
           if ($sln) {
-            msbuild $sln.FullName /p:Configuration=Release
+            msbuild $sln.FullName /p:Configuration=Release /p:FrameworkPathOverride="$env:FX_REF"
           } else {
-            Get-ChildItem -Filter *.csproj -Recurse | ForEach-Object { msbuild $_.FullName /p:Configuration=Release }
+            Get-ChildItem -Filter *.csproj -Recurse | ForEach-Object { msbuild $_.FullName /p:Configuration=Release /p:FrameworkPathOverride="$env:FX_REF" }
           }
         shell: pwsh
