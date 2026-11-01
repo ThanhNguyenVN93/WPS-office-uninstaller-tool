@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - uses: nuget/setup-nuget@v2
+      - name: NuGet restore
+        run: |
+          Get-ChildItem -Filter *.sln -Recurse | ForEach-Object { nuget restore $_.FullName }
+        shell: pwsh
+      - name: Build
+        run: |
+          $sln = Get-ChildItem -Filter *.sln -Recurse | Select-Object -First 1
+          if ($sln) {
+            msbuild $sln.FullName /p:Configuration=Release
+          } else {
+            Get-ChildItem -Filter *.csproj -Recurse | ForEach-Object { msbuild $_.FullName /p:Configuration=Release }
+          }
+        shell: pwsh
