@@ -13,6 +13,10 @@ namespace frmwpsoffice
         public string Tag { get; set; }
         public string PageUrl { get; set; }
         public bool IsNewer { get; set; }
+        /// <summary>Release asset URLs (null when the release has no exe / no SHA256SUMS.txt).</summary>
+        public string ExeUrl { get; set; }
+        public string ExeName { get; set; }
+        public string SumsUrl { get; set; }
     }
 
     /// <summary>
@@ -48,6 +52,15 @@ namespace frmwpsoffice
 
                         string page = Match(json, "\"html_url\"\\s*:\\s*\"(https://github\\.com/[^\"]+/releases/tag/[^\"]+)\"") ?? ReleasesPage;
 
+                        string exeUrl = null, exeName = null, sumsUrl = null;
+                        foreach (Match m in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\""))
+                        {
+                            string u = m.Groups[1].Value;
+                            string name = u.Substring(u.LastIndexOf('/') + 1);
+                            if (exeUrl == null && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) { exeUrl = u; exeName = name; }
+                            else if (name.Equals(Updater.SumsFileName, StringComparison.OrdinalIgnoreCase)) sumsUrl = u;
+                        }
+
                         // Compare using only the parts that are set so "1.3" == "1.3.0.0".
                         Version current = CurrentVersion;
                         return new UpdateInfo
@@ -55,6 +68,9 @@ namespace frmwpsoffice
                             Latest = latest,
                             Tag = tag,
                             PageUrl = page,
+                            ExeUrl = exeUrl,
+                            ExeName = exeName,
+                            SumsUrl = sumsUrl,
                             IsNewer = Normalize(latest).CompareTo(Normalize(current)) > 0
                         };
                     }
@@ -77,7 +93,7 @@ namespace frmwpsoffice
             catch { }
         }
 
-        private static Version Normalize(Version v)
+        internal static Version Normalize(Version v)
         {
             return new Version(Math.Max(v.Major, 0), Math.Max(v.Minor, 0), Math.Max(v.Build, 0), Math.Max(v.Revision, 0));
         }

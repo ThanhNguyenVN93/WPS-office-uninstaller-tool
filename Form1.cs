@@ -186,9 +186,11 @@ namespace frmwpsoffice
                     Logger.Info("Update available: " + info.Tag);
                     linkupdate.Text = $"New version {info.Tag} available!";
                     DialogResult r = MessageBox.Show(
-                        $"A new version is available: {info.Tag} (current: v{UpdateChecker.CurrentVersion.ToString(3)}).\n\nOpen the download page?",
-                        "Update available", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                        $"A new version is available: {info.Tag} (current: v{UpdateChecker.CurrentVersion.ToString(3)}).\n\nYes = download and install it now\nNo = open the download page\nCancel = later",
+                        "Update available", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Information);
                     if (r == DialogResult.Yes)
+                        await InstallUpdateAsync(info);
+                    else if (r == DialogResult.No)
                         UpdateChecker.OpenInBrowser(info.PageUrl);
                 }
                 else if (userInitiated)
@@ -237,9 +239,52 @@ namespace frmwpsoffice
             _ = CheckForUpdateAsync(true);
         }
 
+        private bool _updating;
+
+        /// <summary>Downloads the new exe, verifies its checksum and restarts into it.</summary>
+        private async Task InstallUpdateAsync(UpdateInfo info)
+        {
+            linkupdate.Enabled = false;
+            btncleanup.Enabled = false;
+            btnuninstall.Enabled = false;
+            try
+            {
+                linkupdate.Text = "Downloading update...";
+                string staged = await Updater.DownloadAndVerifyAsync(info, p =>
+                {
+                    if (!IsDisposed) linkupdate.Text = "Downloading update... " + p + "%";
+                });
+                Logger.Info("Update " + info.Tag + " downloaded and verified: " + staged);
+
+                _updating = true; // skip the donate dialog while restarting
+                Updater.StartApply(staged);
+                Close();
+            }
+            catch (Exception ex)
+            {
+                _updating = false;
+                Logger.Error("Automatic update failed", ex);
+                if (IsDisposed) return;
+                linkupdate.Text = $"v{UpdateChecker.CurrentVersion.ToString(3)} - Check for updates";
+                if (MessageBox.Show(
+                        "The automatic update failed: " + ex.Message + "\n\nOpen the download page instead?",
+                        "Update", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                    UpdateChecker.OpenInBrowser(info.PageUrl);
+            }
+            finally
+            {
+                if (!IsDisposed && !_updating)
+                {
+                    linkupdate.Enabled = true;
+                    btncleanup.Enabled = true;
+                    btnuninstall.Enabled = true;
+                }
+            }
+        }
+
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (!DonateSettings.DontShowAgain)
+            if (!_updating && !DonateSettings.DontShowAgain)
             {
                 Logger.Info("Closing (" + e.CloseReason + "): showing donate dialog");
                 if (NTDonate.DonateForm.IsWebView2Usable() && NTDonate.DonateForm.IsSiteReachable())
