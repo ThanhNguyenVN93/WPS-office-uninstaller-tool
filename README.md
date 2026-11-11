@@ -1,39 +1,76 @@
-🗑️ WPS Office Uninstaller Tool
-Project Overview
-A lightweight yet powerful utility designed to completely remove all versions of WPS Office, including lingering files, registry keys, and residual components often left behind by the standard uninstallation process.
+# 🗑️ WPS Office Uninstaller Tool
 
-This tool is especially useful if you are experiencing errors when trying to reinstall WPS Office or if you want to ensure a clean slate on your system.
+[![Latest release](https://img.shields.io/github/v/release/ThanhNguyenVN93/WPS-office-uninstaller-tool)](https://github.com/ThanhNguyenVN93/WPS-office-uninstaller-tool/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-✨ Key Features: Support users to uninstall WPS Office
+A small Windows utility that removes **WPS Office** completely: it runs the official uninstaller, deletes the residual files that are left behind, and (optionally) blocks WPS from being installed again.
 
-- Clean up WPS Office residual files (Local/Roaming data)
-- Block WPS reinstall: per-user Explorer policy (`DisallowRun`) + machine-wide Image File Execution Options block for the installer and WPS processes + Software Restriction Policy path rules with wildcards (catches installers with any file name; Pro/Enterprise) + install-folder lock (deny creating files in `%LocalAppData%\Kingsoft` and `Program Files\WPS Office`, works for any installer name) (`blockwps.bat`; undo with `blockwps.bat /remove`)
-- Auto-enable Local Group Policy Editor (`gpedit.msc`) on Windows Home (`enablegpedit.bat`)
-- Install-path lock also covers `%AppData%\kingsoft` (installer config), `%ProgramData%\kingsoft` and the older `Program Files\Kingsoft\WPS Office` location
-- "Unblock WPS" link removes the reinstall block at any time (UNINSTALL also lifts it automatically); CLEAN UP also removes `%ProgramData%\kingsoft` and `%ProgramData%\WPS` (WPS Cloud document folders are never touched)
-- Local log file for bug reports: `%AppData%\WPSOfficeUninstaller\logspp-YYYYMMDD.log` ("Open log" link in the window; attach it to GitHub issues)
-- Optional web donate page (needs WebView2 Runtime + `Microsoft.Web.WebView2.Core.dll`, `Microsoft.Web.WebView2.WinForms.dll`, `WebView2Loader.dll` next to the exe; otherwise the built-in QR form is used)
-- Built-in update check against GitHub Releases (click the version link at the bottom of the window)
+It is handy when WPS keeps coming back, when a reinstall fails because of leftovers, or when you want a clean system.
 
-🛠️ System Requirements: Any windows which has wps office in the system.
+## ⬇️ Download
 
-Permissions: Administrator privileges are required to perform the necessary uninstallation and Registry modifications.
+**[Download the latest `WPS.OFFICE.UNINSTALLER.TOOL.exe`](https://github.com/ThanhNguyenVN93/WPS-office-uninstaller-tool/releases/latest/download/WPS.OFFICE.UNINSTALLER.TOOL.exe)**
+(all versions and release notes: [Releases](https://github.com/ThanhNguyenVN93/WPS-office-uninstaller-tool/releases))
 
-💻 How to Use (Installation & Execution): Download and run the Tool (pre-built exe: see the [Releases page](https://github.com/ThanhNguyenVN93/WPS-office-uninstaller-tool/releases/latest))
+## 💻 How to use
 
-⚠️ Warnings and Important Notes
-Use with Caution: This tool makes direct modifications to system folders and the Windows Registry. Please use it responsibly and as intended.
+1. Run the exe (UAC will ask for administrator rights when it is needed).
+2. **UNINSTALL** – starts the WPS uninstaller found on the PC.
+3. **CLEAN UP!** – deletes the leftover data, applies the reinstall block and enables `gpedit.msc` (Windows Home). A step-by-step result is shown at the end. If some files are locked by Windows Explorer (WPS shell extension), the tool offers to restart Explorer to release them.
+4. **Unblock WPS** (link at the bottom) – removes the reinstall block whenever you want to install WPS again. UNINSTALL also lifts the block automatically.
+5. **Open log** (link at the bottom) – opens the log folder; attach the latest log when you report a bug.
 
-Data Backup: While the tool only targets the application files, it is always best practice to back up any important WPS documents before running the uninstaller.
+## ✨ Features
 
-WPS Only: This utility is designed only to remove WPS Office. Do not attempt to use it on other applications.
+- Runs the WPS uninstaller (per-user and Program Files installs, including the older `Kingsoft\WPS Office` layout).
+- Cleans residual data: `%LocalAppData%\Kingsoft`, `%AppData%\kingsoft`, `%ProgramData%\kingsoft`, `%ProgramData%\WPS` and any leftover `Program Files\WPS Office`. Your **WPS Cloud document folders are never touched**.
+- Handles read-only files and files locked by Explorer.
+- **Blocks reinstalling WPS** (layers, see below).
+- Enables the Local Group Policy Editor (`gpedit.msc`) on Windows Home.
+- Result summary after CLEAN UP, single running instance, local log file.
+- Update check against GitHub Releases (a notice opens the download page; nothing is installed automatically).
 
-🤝 Support and Contributing
-If you encounter a bug or have suggestions for improvement:
+## 🔒 How the reinstall block works
 
-Report Bugs: Please open a new Issue in the Issues tab on GitHub.
+`blockwps.bat` (embedded in the exe) applies several layers:
 
-Contributing Code: Pull Requests (PRs) are welcome if you wish to enhance the cleanup routines or add features!
+| Layer | What it does | Notes |
+|---|---|---|
+| Install-path lock (main layer) | Replaces the folders WPS installs into with a read-only placeholder **file**: `%LocalAppData%\Kingsoft`, `%AppData%\kingsoft`, `%ProgramData%\kingsoft`, `Program Files (x86)\WPS Office`, `Program Files\WPS Office`, `Program Files[ (x86)]\Kingsoft` | Works for any installer file name. The installer gets stuck (around 60–90 %) instead of installing. |
+| Explorer policy (`DisallowRun`) | Stops WPS programs from starting from Explorer | Current user only |
+| Image File Execution Options | Makes `wps.exe`, `wpp.exe`, `et.exe`, `wpspdf.exe`, `ksolaunch.exe`, … exit immediately | Machine-wide, matches by file name |
+| Software Restriction Policy | Path rules such as `*\wps_wid*.exe` | Extra layer; did **not** take effect on the Windows 10 Pro test machine |
 
-📄 License
-This tool is released under the MIT License.
+To remove everything use the **Unblock WPS** link.
+
+## ⚠️ Limitations and warnings
+
+- The block follows the default install locations. An installer that lets the user pick another folder (for example `D:\WPS`) can still install.
+- It is not tamper-proof: anyone with administrator rights can unblock.
+- IFEO blocks any program with those exact names, including non-WPS software named `et.exe` or `wpp.exe`, while the block is active.
+- `%ProgramData%\kingsoft` is locked too, so other Kingsoft products cannot write there while the block is active.
+- The exe is not code-signed, so Windows SmartScreen or an antivirus may warn because the tool edits the registry, stops processes and restarts Explorer.
+- Tested on Windows 10 Pro only (not yet on Windows Home / Windows 11).
+- Back up important WPS documents before running the tool. It modifies system folders and the registry; use it only for WPS Office.
+
+## 🧰 Requirements
+
+- Windows 10/11 with **.NET Framework 4.8** (the tool checks and guides you if it is missing).
+- Administrator rights for the uninstall, block and `gpedit.msc` steps.
+
+## 🔨 Build from source
+
+```bash
+msbuild frmwpsoffice.csproj /p:Configuration=Release
+```
+
+Visual Studio 2022 or Build Tools with the .NET Framework 4.8 targeting pack is required. GitHub Actions builds every push and pull request.
+
+## 🤝 Support and contributing
+
+- Found a bug? Open an [Issue](https://github.com/ThanhNguyenVN93/WPS-office-uninstaller-tool/issues) and attach the log from **Open log**.
+- Pull requests are welcome, for example for the cleanup routines or new features.
+
+## 📄 License
+
+Released under the [MIT License](LICENSE).
