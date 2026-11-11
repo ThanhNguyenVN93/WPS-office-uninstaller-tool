@@ -63,6 +63,8 @@ reg query "%SRP%" /v DefaultLevel >nul 2>&1 || (
 )
 call :srp_add 01 "*\WPSOffice*.exe"
 call :srp_add 02 "*\wps_office*.exe"
+call :srp_add 05 "*\wps_wid*.exe"
+call :srp_add 06 "*\konlinesetup*.exe"
 call :srp_add 03 "*\Kingsoft\WPS Office\*"
 call :srp_add 04 "*\WPS Office\*"
 
@@ -79,7 +81,7 @@ for %%E in (%APPS%) do (
     reg delete "%IFEO%\%%E" /v Debugger /f /reg:64 >nul 2>&1
     reg delete "%IFEO%\%%E" /v Debugger /f /reg:32 >nul 2>&1
 )
-for %%N in (01 02 03 04) do reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers\0\Paths\{7a1d0c00-5a11-4f00-9a00-0000000000%%N}" /f >nul 2>&1
+for %%N in (01 02 03 04 05 06) do reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers\0\Paths\{7a1d0c00-5a11-4f00-9a00-0000000000%%N}" /f >nul 2>&1
 ECHO WPS Office block removed.
 
 :end
