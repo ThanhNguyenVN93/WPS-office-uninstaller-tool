@@ -40,6 +40,7 @@
             this.txtdirect = new System.Windows.Forms.TextBox();
             this.txtcheck = new System.Windows.Forms.TextBox();
             this.lblcheck = new System.Windows.Forms.Label();
+            this.linkupdate = new System.Windows.Forms.LinkLabel();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.groupBox3.SuspendLayout();
@@ -162,19 +163,32 @@
             this.lblcheck.TabIndex = 0;
             this.lblcheck.Text = "CHECK:";
             // 
+            // linkupdate
+            // 
+            this.linkupdate.AutoSize = true;
+            this.linkupdate.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.linkupdate.Location = new System.Drawing.Point(10, 382);
+            this.linkupdate.Name = "linkupdate";
+            this.linkupdate.Size = new System.Drawing.Size(120, 15);
+            this.linkupdate.TabIndex = 2;
+            this.linkupdate.TabStop = true;
+            this.linkupdate.Text = "Check for updates";
+            this.linkupdate.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.linkupdate_LinkClicked);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(404, 377);
+            this.ClientSize = new System.Drawing.Size(404, 401);
+            this.Controls.Add(this.linkupdate);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;
-            this.MaximumSize = new System.Drawing.Size(420, 416);
+            this.MaximumSize = new System.Drawing.Size(420, 440);
             this.MinimizeBox = false;
-            this.MinimumSize = new System.Drawing.Size(420, 416);
+            this.MinimumSize = new System.Drawing.Size(420, 440);
             this.Name = "Form1";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "WPS UNINSTALLER TOOL - BY: THANH NGUYEN";
@@ -203,6 +217,7 @@
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Button btncleanup;
         private System.Windows.Forms.Button btnuninstall;
+        private System.Windows.Forms.LinkLabel linkupdate;
     }
 }
 

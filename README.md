@@ -6,11 +6,16 @@ This tool is especially useful if you are experiencing errors when trying to rei
 
 ✨ Key Features: Support users to uninstall WPS Office
 
+- Clean up WPS Office residual files (Local/Roaming data)
+- Block WPS reinstall via policy registry (`blockwps.bat`)
+- Auto-enable Local Group Policy Editor (`gpedit.msc`) on Windows Home (`enablegpedit.bat`)
+- Built-in update check against GitHub Releases (click the version link at the bottom of the window)
+
 🛠️ System Requirements: Any windows which has wps office in the system.
 
 Permissions: Administrator privileges are required to perform the necessary uninstallation and Registry modifications.
 
-💻 How to Use (Installation & Execution): Download and run the Tool
+💻 How to Use (Installation & Execution): Download and run the Tool (pre-built exe is in the `dist/` folder and on the Releases page)
 
 ⚠️ Warnings and Important Notes
 Use with Caution: This tool makes direct modifications to system folders and the Windows Registry. Please use it responsibly and as intended.

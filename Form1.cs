@@ -151,9 +151,52 @@ namespace frmwpsoffice
 
             CheckWPSInstallLocation();
 
+            linkupdate.Text = $"v{UpdateChecker.CurrentVersion.ToString(3)} - Check for updates";
+            _ = CheckForUpdateAsync(false);
+
             string currentUser = Environment.UserName;
             lblsys.Text += $"\nCurrent User: {currentUser}";
         }
+        private async Task CheckForUpdateAsync(bool userInitiated)
+        {
+            linkupdate.Enabled = false;
+            try
+            {
+                UpdateInfo info = await UpdateChecker.CheckAsync();
+                if (IsDisposed) return;
+
+                if (info == null)
+                {
+                    if (userInitiated)
+                        MessageBox.Show("Could not check for updates. Please check your internet connection.", "Update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (info.IsNewer)
+                {
+                    linkupdate.Text = $"New version {info.Tag} available!";
+                    DialogResult r = MessageBox.Show(
+                        $"A new version is available: {info.Tag} (current: v{UpdateChecker.CurrentVersion.ToString(3)}).\n\nOpen the download page?",
+                        "Update available", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                    if (r == DialogResult.Yes)
+                        UpdateChecker.OpenInBrowser(info.PageUrl);
+                }
+                else if (userInitiated)
+                {
+                    MessageBox.Show("You are using the latest version.", "Update", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            finally
+            {
+                if (!IsDisposed) linkupdate.Enabled = true;
+            }
+        }
+
+        private void linkupdate_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            _ = CheckForUpdateAsync(true);
+        }
+
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             if (!DonateSettings.DontShowAgain)
@@ -279,6 +322,8 @@ namespace frmwpsoffice
                 try
                 {
                     RunEmbeddedBatchFile("frmwpsoffice.blockwps.bat");
+                    // Make sure the Local Group Policy Editor exists (Windows Home) so the block policy can be reviewed/managed.
+                    RunEmbeddedBatchFile("frmwpsoffice.enablegpedit.bat");
                     MessageBox.Show("Cleanup and blocking completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch
