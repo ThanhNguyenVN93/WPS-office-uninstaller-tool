@@ -234,7 +234,28 @@ namespace frmwpsoffice
                 }
             }
         }
-        private void btnuninstall_Click(object sender, EventArgs e)
+        /// <summary>True when a block created by blockwps.bat is currently in the registry (readable without admin).</summary>
+        private static bool IsBlockActive()
+        {
+            try
+            {
+                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowRun"))
+                {
+                    if (k != null && (k.GetValue("wps.exe") != null || k.GetValue("wps_office_inst.exe") != null))
+                        return true;
+                }
+                foreach (var view in new[] { Microsoft.Win32.RegistryView.Registry64, Microsoft.Win32.RegistryView.Registry32 })
+                using (var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, view))
+                using (var k = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\wps.exe"))
+                {
+                    if (k != null && k.GetValue("Debugger") != null) return true;
+                }
+            }
+            catch (Exception ex) { Logger.Warn("IsBlockActive failed: " + ex.Message); }
+            return false;
+        }
+
+        private async void btnuninstall_Click(object sender, EventArgs e)
         {
             string wpsRootPath = txtdirect.Text;
             string uninstallerPath = null;
@@ -246,6 +267,24 @@ namespace frmwpsoffice
             }
 
             KillWPSProcess();
+            // A previous CLEAN UP leaves the WPS block active; the WPS uninstaller launches WPS components
+            // itself, so lift the block first (CLEAN UP re-applies it afterwards).
+            if (IsBlockActive())
+            {
+                txtcheck.Text = "Lifting WPS block before uninstall...";
+                btnuninstall.Enabled = false;
+                string sid0 = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+                int rc = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent /remove {sid0}");
+                Logger.Info("Lifted WPS block before uninstall: rc=" + rc);
+                if (IsDisposed) return;
+                btnuninstall.Enabled = true;
+                if (rc != 0)
+                {
+                    txtcheck.Text = "Could not lift the WPS block (admin permission needed). Uninstall may be restricted.";
+                    return;
+                }
+            }
+
             uninstallerPath = FindFileRecursively(wpsRootPath, "uninst.exe");
 
             if (uninstallerPath != null)
