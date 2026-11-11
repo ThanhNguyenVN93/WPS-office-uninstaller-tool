@@ -62,8 +62,9 @@ namespace frmwpsoffice
                         };
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Logger.Warn("Update check failed: " + ex.Message);
                     return null;
                 }
             });

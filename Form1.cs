@@ -29,7 +29,7 @@ namespace frmwpsoffice
             {
                 return Directory.GetFiles(rootPath, fileName, SearchOption.AllDirectories).FirstOrDefault();
             }
-            catch { return null; }
+            catch (Exception ex) { Logger.Error("Search failed in " + rootPath, ex); return null; }
         }
 
         // -------------------------------------------------------------
@@ -95,7 +95,7 @@ namespace frmwpsoffice
                             }
                             catch
                             {
-                                // Skip if no permission
+                                Logger.Warn("Cannot kill process id " + p.Id + " (no permission?)");
                             }
                         }
                     }
@@ -110,6 +110,7 @@ namespace frmwpsoffice
             }
             catch (Exception ex)
             {
+                Logger.Error("KillWPSProcess failed", ex);
                 txtcheck.Text = $"Warning: {ex.Message}";
             }
         }
@@ -123,9 +124,9 @@ namespace frmwpsoffice
                 try
                 { Directory.Delete(kingsoftRoamingPath, true); return true; }
                 catch (UnauthorizedAccessException authEx)
-                { txtcheck.Text = $"Access permission Roaming error: Need run Admin permission. ({authEx.Message})"; return false; }
+                { Logger.Error("Roaming cleanup: access denied", authEx); txtcheck.Text = $"Access permission Roaming error: Need run Admin permission. ({authEx.Message})"; return false; }
                 catch (Exception ex)
-                { txtcheck.Text = $"Error when deleting Roaming data: {ex.Message}"; return false; }
+                { Logger.Error("Roaming cleanup failed", ex); txtcheck.Text = $"Error when deleting Roaming data: {ex.Message}"; return false; }
             }
             return true;
         }
@@ -150,6 +151,7 @@ namespace frmwpsoffice
             }
 
             CheckWPSInstallLocation();
+            Logger.Info("Scan: " + txtcheck.Text + " | dir=" + txtdirect.Text);
 
             linkupdate.Text = $"v{UpdateChecker.CurrentVersion.ToString(3)} - Check for updates";
             _ = CheckForUpdateAsync(false);
@@ -174,6 +176,7 @@ namespace frmwpsoffice
 
                 if (info.IsNewer)
                 {
+                    Logger.Info("Update available: " + info.Tag);
                     linkupdate.Text = $"New version {info.Tag} available!";
                     DialogResult r = MessageBox.Show(
                         $"A new version is available: {info.Tag} (current: v{UpdateChecker.CurrentVersion.ToString(3)}).\n\nOpen the download page?",
@@ -192,6 +195,11 @@ namespace frmwpsoffice
             }
         }
 
+        private void linklog_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            Logger.OpenFolder();
+        }
+
         private void linkupdate_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             _ = CheckForUpdateAsync(true);
@@ -201,6 +209,24 @@ namespace frmwpsoffice
         {
             if (!DonateSettings.DontShowAgain)
             {
+                if (NTDonate.DonateForm.IsWebView2Usable() && NTDonate.DonateForm.IsSiteReachable())
+                {
+                    try
+                    {
+                        using (NTDonate.DonateForm web = new NTDonate.DonateForm(false))
+                        {
+                            web.ShowDialog(this);
+                            if (web.DontShowAgain) DonateSettings.DontShowAgain = true;
+                        }
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Web donate form failed, using offline form", ex);
+                    }
+                }
+
+                // No WebView2 / offline / site unreachable: local QR form
                 using (frmDonate donateForm = new frmDonate())
                 {
                     donateForm.ShowDialog(this);
@@ -233,6 +259,7 @@ namespace frmwpsoffice
                         Verb = "runas"
                     };
                     Process.Start(startInfo);
+                    Logger.Info("Started uninstaller: " + uninstallerPath);
                     txtcheck.Text = "Running WPS Office Uninstaller (admin mode)...";
                 }
                 catch (Exception ex)
@@ -266,11 +293,13 @@ namespace frmwpsoffice
                 try
                 {
                     Directory.Delete(kingsoftLocalPath, true);
+                    Logger.Info("Local Kingsoft data deleted: " + kingsoftLocalPath);
                     txtcheck.Text = "Local data deleted successfully.";
                     return;
                 }
-                catch (IOException)
+                catch (IOException ioex)
                 {
+                    Logger.Warn("Delete Kingsoft local data attempt " + attempt + "/" + MaxRetries + " failed: " + ioex.Message);
                     if (attempt < MaxRetries)
                     {
                         txtcheck.Text = $"Retrying ({attempt}/{MaxRetries}): file is locked...";
@@ -282,13 +311,15 @@ namespace frmwpsoffice
                         return;
                     }
                 }
-                catch (UnauthorizedAccessException)
+                catch (UnauthorizedAccessException uae)
                 {
+                    Logger.Error("Local cleanup: access denied", uae);
                     txtcheck.Text = "Access denied. Will need admin rights for full cleanup.";
                     return;
                 }
                 catch (Exception ex)
                 {
+                    Logger.Error("Local cleanup failed", ex);
                     txtcheck.Text = $"Error: {ex.Message}";
                     return;
                 }
@@ -332,6 +363,7 @@ namespace frmwpsoffice
                 txtcheck.Text = "Enabling Group Policy Editor...";
                 // Make sure the Local Group Policy Editor exists (Windows Home) so the block policy can be reviewed/managed.
                 int gpCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.enablegpedit.bat", "/silent");
+                Logger.Info("Scripts finished: blockwps=" + blockCode + " enablegpedit=" + gpCode);
 
                 string blockMsg = blockCode == 0 ? "OK - WPS is blocked (log out/in to fully apply)"
                     : blockCode == -2 ? "Skipped - administrator permission was denied"
@@ -403,10 +435,12 @@ namespace frmwpsoffice
             }
             catch (Win32Exception wex) when (wex.NativeErrorCode == 1223)
             {
+                Logger.Warn("UAC declined for " + resourceName);
                 return -2; // user cancelled UAC
             }
             catch (Exception ex)
             {
+                Logger.Error("Error running " + resourceName, ex);
                 MessageBox.Show("Error running batch file: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return -1;
             }
