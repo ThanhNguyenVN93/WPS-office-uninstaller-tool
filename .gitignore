@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Local build copies of the release exe (published on GitHub Releases, not in git)
+dist/
