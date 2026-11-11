@@ -209,6 +209,7 @@ namespace frmwpsoffice
         {
             if (!DonateSettings.DontShowAgain)
             {
+                Logger.Info("Closing (" + e.CloseReason + "): showing donate dialog");
                 if (NTDonate.DonateForm.IsWebView2Usable() && NTDonate.DonateForm.IsSiteReachable())
                 {
                     try
@@ -273,7 +274,41 @@ namespace frmwpsoffice
             }
         }
 
-        private void CleanWPSResidualFiles()
+        /// <summary>Deletes a directory tree best-effort (clears read-only flags). Returns the number of items that could not be removed.</summary>
+        private static int DeleteTreeForce(string dir)
+        {
+            int failed = 0;
+            try
+            {
+                foreach (string file in Directory.GetFiles(dir))
+                {
+                    try { File.SetAttributes(file, FileAttributes.Normal); File.Delete(file); }
+                    catch (Exception ex) { failed++; Logger.Warn("Cannot delete file " + file + ": " + ex.Message); }
+                }
+                foreach (string sub in Directory.GetDirectories(dir))
+                {
+                    // Do not follow junctions/symlinks, just drop the link itself.
+                    if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        try { Directory.Delete(sub, false); }
+                        catch (Exception ex) { failed++; Logger.Warn("Cannot remove link " + sub + ": " + ex.Message); }
+                        continue;
+                    }
+                    failed += DeleteTreeForce(sub);
+                }
+                File.SetAttributes(dir, FileAttributes.Normal);
+                Directory.Delete(dir, false);
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                Logger.Warn("Cannot delete folder " + dir + ": " + ex.Message);
+            }
+            return failed;
+        }
+
+        /// <summary>Returns true when the local Kingsoft data is gone afterwards.</summary>
+        private bool CleanWPSResidualFiles()
         {
             string appdata = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string kingsoftLocalPath = Path.Combine(appdata, "Kingsoft");
@@ -281,49 +316,50 @@ namespace frmwpsoffice
             if (!Directory.Exists(kingsoftLocalPath))
             {
                 txtcheck.Text = "Kingsoft folder not found (already clean).";
-                return;
+                return true;
             }
 
             KillWPSProcess();
-            System.Threading.Thread.Sleep(300);
-
-            const int MaxRetries = 3;
-            for (int attempt = 1; attempt <= MaxRetries; attempt++)
+            // The WPS uninstaller may still be running and holding files; stop it too.
+            foreach (Process p in Process.GetProcesses().Where(x => x.ProcessName.Equals("uninst", StringComparison.OrdinalIgnoreCase)).ToList())
             {
                 try
                 {
-                    Directory.Delete(kingsoftLocalPath, true);
+                    string exePath = p.MainModule?.FileName ?? "";
+                    if (exePath.StartsWith(kingsoftLocalPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Logger.Info("Stopping WPS uninstaller still running: " + exePath);
+                        p.Kill();
+                        p.WaitForExit(2000);
+                    }
+                }
+                catch { }
+            }
+            System.Threading.Thread.Sleep(300);
+
+            const int MaxRetries = 3;
+            int failed = 0;
+            for (int attempt = 1; attempt <= MaxRetries; attempt++)
+            {
+                failed = DeleteTreeForce(kingsoftLocalPath);
+                if (failed == 0 && !Directory.Exists(kingsoftLocalPath))
+                {
                     Logger.Info("Local Kingsoft data deleted: " + kingsoftLocalPath);
                     txtcheck.Text = "Local data deleted successfully.";
-                    return;
+                    return true;
                 }
-                catch (IOException ioex)
+
+                Logger.Warn("Delete Kingsoft local data attempt " + attempt + "/" + MaxRetries + ": " + failed + " item(s) left");
+                if (attempt < MaxRetries)
                 {
-                    Logger.Warn("Delete Kingsoft local data attempt " + attempt + "/" + MaxRetries + " failed: " + ioex.Message);
-                    if (attempt < MaxRetries)
-                    {
-                        txtcheck.Text = $"Retrying ({attempt}/{MaxRetries}): file is locked...";
-                        System.Threading.Thread.Sleep(800);
-                    }
-                    else
-                    {
-                        txtcheck.Text = $"I/O Error: Unable to delete. File may be locked. Request admin rights for cleanup button.";
-                        return;
-                    }
-                }
-                catch (UnauthorizedAccessException uae)
-                {
-                    Logger.Error("Local cleanup: access denied", uae);
-                    txtcheck.Text = "Access denied. Will need admin rights for full cleanup.";
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error("Local cleanup failed", ex);
-                    txtcheck.Text = $"Error: {ex.Message}";
-                    return;
+                    txtcheck.Text = $"Retrying ({attempt}/{MaxRetries}): some files are locked...";
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(800);
                 }
             }
+
+            txtcheck.Text = "Some local data could not be deleted (files locked or access denied). See log.";
+            return false;
         }
         private async void btncleanup_Click_1(object sender, EventArgs e)
         {
@@ -345,7 +381,7 @@ namespace frmwpsoffice
             btnuninstall.Enabled = false;
             try
             {
-                CleanWPSResidualFiles();
+                bool localSuccess = CleanWPSResidualFiles();
 
                 bool roamingSuccess = CleanWPSRoamingData();
                 if (!roamingSuccess)
@@ -373,14 +409,14 @@ namespace frmwpsoffice
                     : gpCode == -2 ? "Skipped - administrator permission was denied"
                     : "FAILED - this Windows edition may not support gpedit.msc (blocking still works)";
 
-                bool allOk = blockCode == 0 && gpCode == 0;
+                bool allOk = localSuccess && blockCode == 0 && gpCode == 0;
                 txtcheck.Text = allOk ? "All cleanup completed!" : "Cleanup completed with warnings.";
                 MessageBox.Show(
-                    "Local data cleanup: OK\nWPS block: " + blockMsg + "\nGroup Policy Editor: " + gpMsg,
+                    "Local data cleanup: " + (localSuccess ? "OK" : "INCOMPLETE - some files were locked or access was denied (see log)") + "\nWPS block: " + blockMsg + "\nGroup Policy Editor: " + gpMsg,
                     allOk ? "Success" : "Completed with warnings",
                     MessageBoxButtons.OK,
                     allOk ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-                Application.Exit();
+                Close();
             }
             finally
             {
