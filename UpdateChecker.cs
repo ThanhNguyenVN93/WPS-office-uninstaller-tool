@@ -12,7 +12,6 @@ namespace frmwpsoffice
         public Version Latest { get; set; }
         public string Tag { get; set; }
         public string PageUrl { get; set; }
-        public string DownloadUrl { get; set; }
         public bool IsNewer { get; set; }
     }
 
@@ -48,7 +47,6 @@ namespace frmwpsoffice
                         if (!Version.TryParse(tag.TrimStart('v', 'V'), out latest)) return null;
 
                         string page = Match(json, "\"html_url\"\\s*:\\s*\"(https://github\\.com/[^\"]+/releases/tag/[^\"]+)\"") ?? ReleasesPage;
-                        string exe = Match(json, "\"browser_download_url\"\\s*:\\s*\"(https://github\\.com/[^\"]+\\.exe)\"");
 
                         // Compare using only the parts that are set so "1.3" == "1.3.0.0".
                         Version current = CurrentVersion;
@@ -57,7 +55,6 @@ namespace frmwpsoffice
                             Latest = latest,
                             Tag = tag,
                             PageUrl = page,
-                            DownloadUrl = exe,
                             IsNewer = Normalize(latest).CompareTo(Normalize(current)) > 0
                         };
                     }
