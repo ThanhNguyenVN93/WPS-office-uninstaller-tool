@@ -278,7 +278,7 @@ namespace frmwpsoffice
                 txtcheck.Text = "Lifting WPS block before uninstall...";
                 btnuninstall.Enabled = false;
                 string sid0 = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
-                int rc = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent /remove {sid0} \"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}\"");
+                int rc = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent /remove {sid0}");
                 Logger.Info("Lifted WPS block before uninstall: rc=" + rc);
                 if (IsDisposed) return;
                 btnuninstall.Enabled = true;
@@ -475,7 +475,7 @@ namespace frmwpsoffice
 
                 // Pass the real user's SID so the per-user policy is written to the right hive even if UAC elevates another admin account.
                 string sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
-                int blockCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent {sid} \"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}\"");
+                int blockCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent {sid}");
 
                 txtcheck.Text = "Enabling Group Policy Editor...";
                 // Make sure the Local Group Policy Editor exists (Windows Home) so the block policy can be reviewed/managed.
@@ -516,6 +516,8 @@ namespace frmwpsoffice
         public static async Task<int> RunEmbeddedBatchFileAsync(string resourceName, string arguments = "")
         {
             string tempFilePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".bat");
+            string wrapperPath = Path.ChangeExtension(tempFilePath, ".run.bat");
+            string scriptLogPath = Path.ChangeExtension(tempFilePath, ".log");
             try
             {
                 using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
@@ -531,10 +533,15 @@ namespace frmwpsoffice
                     }
                 }
 
+                // Run through a tiny wrapper so the script's output ends up in a file we can copy into the app log.
+                File.WriteAllText(wrapperPath,
+                    "@echo off\r\ncall \"" + tempFilePath + "\" " + arguments + " > \"" + scriptLogPath + "\" 2>&1\r\nexit /b %ERRORLEVEL%\r\n",
+                    Encoding.Default);
+                Logger.Info("Running " + resourceName + " " + arguments);
+
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
-                    FileName = tempFilePath,
-                    Arguments = arguments,
+                    FileName = wrapperPath,
                     UseShellExecute = true,
                     Verb = "runas",
                     WindowStyle = ProcessWindowStyle.Hidden
@@ -563,7 +570,18 @@ namespace frmwpsoffice
             }
             finally
             {
+                try
+                {
+                    if (File.Exists(scriptLogPath))
+                    {
+                        foreach (string line in File.ReadAllLines(scriptLogPath, Encoding.Default))
+                            if (line.Trim().Length > 0 && !line.StartsWith("====")) Logger.Info("  [script] " + line.Trim());
+                    }
+                }
+                catch { }
                 try { File.Delete(tempFilePath); } catch { }
+                try { File.Delete(wrapperPath); } catch { }
+                try { File.Delete(scriptLogPath); } catch { }
             }
         }
     }

@@ -38,7 +38,10 @@ set "APPS=wps_office_inst.exe wpscenter.exe wpscloudsvr.exe wpsupdate.exe ksolau
 set "ERR=0"
 
 :: Install folders: per-user LocalAppData of the real user (passed in) and Program Files.
+:: Real user's profile folder from the SID (the elevated account may be a different admin).
+if not defined LAD if defined SID for /f "tokens=2,*" %%a in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\%SID%" /v ProfileImagePath 2^>nul ^| "%SystemRoot%\System32\find.exe" "ProfileImagePath"') do call set "LAD=%%b\AppData\Local"
 if not defined LAD set "LAD=%LOCALAPPDATA%"
+ECHO args: %*  ^| LAD=%LAD% ^| SID=%SID%
 if not defined SID for /f "tokens=2 delims=," %%s in ('whoami /user /fo csv /nh') do set "SID=%%~s"
 
 if "%REMOVE%"=="1" goto :remove
