@@ -28,7 +28,8 @@ It is handy when WPS keeps coming back, when a reinstall fails because of leftov
 - **Blocks reinstalling WPS** (layers, see below).
 - Enables the Local Group Policy Editor (`gpedit.msc`) on Windows Home.
 - Result summary after CLEAN UP, single running instance, local log file.
-- **Auto-update (v1.5.0+)**: when a new release exists the tool asks whether to update. *Yes* downloads the exe from this repository's GitHub Releases, verifies its SHA-256 against the release's `SHA256SUMS.txt` and its version number, replaces the installed exe and restarts. If anything does not match, nothing is replaced. Versions before 1.5.0 only show a notice and open the download page, so download v1.5.0 or newer manually once.
+- **Release notes in the app (v1.5.1+)**: the "Update available" window shows the release's *What's new*, and the first start after an update shows the notes of the installed version once.
+- **Auto-update (v1.5.0+)**: when a new release exists the tool asks whether to update. *Update now* downloads the exe from this repository's GitHub Releases, verifies its SHA-256 against the release's `SHA256SUMS.txt` and its version number, replaces the installed exe and restarts. If anything does not match, nothing is replaced. Versions before 1.5.0 only show a notice and open the download page, so download v1.5.0 or newer manually once.
 
 ## 🔒 How the reinstall block works
 

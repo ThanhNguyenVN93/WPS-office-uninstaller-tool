@@ -161,11 +161,32 @@ namespace frmwpsoffice
             Logger.Info("Scan: " + txtcheck.Text + " | dir=" + txtdirect.Text);
 
             linkupdate.Text = $"v{UpdateChecker.CurrentVersion.ToString(3)} - Check for updates";
-            _ = CheckForUpdateAsync(false);
+            _ = StartupUpdateTasksAsync();
 
             string currentUser = Environment.UserName;
             lblsys.Text += $"\nCurrent User: {currentUser}";
         }
+        /// <summary>On start: show "What's new" once after an update, then look for a newer version.</summary>
+        private async Task StartupUpdateTasksAsync()
+        {
+            await ShowWhatsNewIfUpdatedAsync();
+            if (!IsDisposed) await CheckForUpdateAsync(false);
+        }
+
+        private async Task ShowWhatsNewIfUpdatedAsync()
+        {
+            Version last = UpdateChecker.LastRunVersion;
+            Version current = UpdateChecker.CurrentVersion;
+            UpdateChecker.RememberCurrentVersion();
+            bool justUpdated = UpdateChecker.ConsumeWhatsNewPending();
+            if (!justUpdated && (last == null || UpdateChecker.Normalize(last).CompareTo(UpdateChecker.Normalize(current)) >= 0)) return;
+
+            UpdateInfo info = await UpdateChecker.GetCurrentReleaseAsync();
+            if (info == null || IsDisposed) return;
+            Logger.Info("Showing what's new: " + (last == null ? "?" : last.ToString(3)) + " -> " + info.Tag);
+            UpdateDialog.ShowWhatsNew(this, info);
+        }
+
         private async Task CheckForUpdateAsync(bool userInitiated)
         {
             linkupdate.Enabled = false;
@@ -185,12 +206,10 @@ namespace frmwpsoffice
                 {
                     Logger.Info("Update available: " + info.Tag);
                     linkupdate.Text = $"New version {info.Tag} available!";
-                    DialogResult r = MessageBox.Show(
-                        $"A new version is available: {info.Tag} (current: v{UpdateChecker.CurrentVersion.ToString(3)}).\n\nYes = download and install it now\nNo = open the download page\nCancel = later",
-                        "Update available", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Information);
-                    if (r == DialogResult.Yes)
+                    UpdateChoice choice = UpdateDialog.ShowUpdate(this, info);
+                    if (choice == UpdateChoice.UpdateNow)
                         await InstallUpdateAsync(info);
-                    else if (r == DialogResult.No)
+                    else if (choice == UpdateChoice.OpenPage)
                         UpdateChecker.OpenInBrowser(info.PageUrl);
                 }
                 else if (userInitiated)

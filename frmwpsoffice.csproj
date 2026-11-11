@@ -65,6 +65,9 @@
     <Compile Include="DonateSettings.cs" />
     <Compile Include="UpdateChecker.cs" />
     <Compile Include="Updater.cs" />
+    <Compile Include="UpdateDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Logger.cs" />
     <Compile Include="DonateForm.cs">
       <SubType>Form</SubType>
