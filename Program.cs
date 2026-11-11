@@ -12,10 +12,17 @@ namespace frmwpsoffice
         /// The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            // Update step: this is the freshly downloaded exe replacing the installed one (no UI, no single-instance lock).
+            if (args.Length >= 3 && args[0] == Updater.ApplyArg)
+            {
+                Updater.RunApply(args[1], args[2], args.Length > 3 && args[3] == Updater.ElevatedArg);
+                return;
+            }
 
             // Single instance: a second launch just brings the running window to the front.
             bool createdNew;
@@ -74,6 +81,7 @@ namespace frmwpsoffice
         private static void RunApp()
         {
             Logger.LogStartup();
+            Updater.CleanupOldStaging();
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException += (s, e) =>
             {

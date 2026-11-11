@@ -28,7 +28,7 @@ It is handy when WPS keeps coming back, when a reinstall fails because of leftov
 - **Blocks reinstalling WPS** (layers, see below).
 - Enables the Local Group Policy Editor (`gpedit.msc`) on Windows Home.
 - Result summary after CLEAN UP, single running instance, local log file.
-- Update check against GitHub Releases (a notice opens the download page; nothing is installed automatically).
+- **Auto-update (v1.5.0+)**: when a new release exists the tool asks whether to update. *Yes* downloads the exe from this repository's GitHub Releases, verifies its SHA-256 against the release's `SHA256SUMS.txt` and its version number, replaces the installed exe and restarts. If anything does not match, nothing is replaced. Versions before 1.5.0 only show a notice and open the download page, so download v1.5.0 or newer manually once.
 
 ## 🔒 How the reinstall block works
 
@@ -49,7 +49,8 @@ To remove everything use the **Unblock WPS** link.
 - It is not tamper-proof: anyone with administrator rights can unblock.
 - IFEO blocks any program with those exact names, including non-WPS software named `et.exe` or `wpp.exe`, while the block is active.
 - `%ProgramData%\kingsoft` is locked too, so other Kingsoft products cannot write there while the block is active.
-- The exe is not code-signed, so Windows SmartScreen or an antivirus may warn because the tool edits the registry, stops processes and restarts Explorer.
+- The exe is not code-signed, so Windows SmartScreen or an antivirus may warn because the tool edits the registry, stops processes and restarts Explorer. The self-update (download + replace itself) can trigger the same warnings.
+- Auto-update trusts this repository's GitHub releases: whoever can publish a release can ship an exe, and the checksum file lives in the same release. Keep two-factor authentication on the GitHub account.
 - Tested on Windows 10 Pro only (not yet on Windows Home / Windows 11).
 - Back up important WPS documents before running the tool. It modifies system folders and the registry; use it only for WPS Office.
 
