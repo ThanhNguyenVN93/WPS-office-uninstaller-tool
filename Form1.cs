@@ -482,7 +482,7 @@ namespace frmwpsoffice
                 int gpCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.enablegpedit.bat", "/silent");
                 Logger.Info("Scripts finished: blockwps=" + blockCode + " enablegpedit=" + gpCode);
 
-                string blockMsg = blockCode == 0 ? "OK - WPS is blocked (log out/in to fully apply)"
+                string blockMsg = blockCode == 0 ? "OK - WPS is blocked (restart the computer to fully apply)"
                     : blockCode == -2 ? "Skipped - administrator permission was denied"
                     : "FAILED - some block entries could not be written";
                 string gpMsg = gpCode == 0 ? "OK - gpedit.msc is available"

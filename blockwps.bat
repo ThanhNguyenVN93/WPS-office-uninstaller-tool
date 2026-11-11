@@ -61,6 +61,8 @@ reg query "%SRP%" /v DefaultLevel >nul 2>&1 || (
     reg add "%SRP%" /v PolicyScope /t REG_DWORD /d 0 /f >nul 2>&1
     reg add "%SRP%" /v AuthenticodeEnabled /t REG_DWORD /d 0 /f >nul 2>&1
 )
+:: File types the policy applies to (what gpedit writes by default). Without it SRP may enforce nothing.
+reg query "%SRP%" /v ExecutableTypes >nul 2>&1 || reg add "%SRP%" /v ExecutableTypes /t REG_MULTI_SZ /s "," /d "ADE,ADP,BAS,BAT,CHM,CMD,COM,CPL,CRT,EXE,HLP,HTA,INF,INS,ISP,LNK,MDB,MDE,MSC,MSI,MSP,MST,OCX,PCD,PIF,REG,SCR,SHS,URL,VB,WSC" /f >nul 2>&1
 call :srp_add 01 "*\WPSOffice*.exe"
 call :srp_add 02 "*\wps_office*.exe"
 call :srp_add 05 "*\wps_wid*.exe"
@@ -69,7 +71,7 @@ call :srp_add 03 "*\Kingsoft\WPS Office\*"
 call :srp_add 04 "*\WPS Office\*"
 
 if "%ERR%"=="0" (
-    ECHO WPS Office applications are now blocked. Log out/in to apply the Explorer policy.
+    ECHO WPS Office applications are now blocked. Restart the computer to apply all policies.
 ) else (
     ECHO Some registry entries could not be written.
 )
@@ -91,7 +93,9 @@ exit /b %ERR%
 :srp_add
 :: %1 = rule number (2 digits), %2 = path pattern
 set "RULE=%SRP%\0\Paths\{7a1d0c00-5a11-4f00-9a00-0000000000%~1}"
-reg add "%RULE%" /v ItemData /t REG_SZ /d "%~2" /f >nul 2>&1 || set "ERR=1"
+:: Same value types gpedit itself writes (ItemData = REG_EXPAND_SZ, LastModified = FILETIME).
+reg add "%RULE%" /v ItemData /t REG_EXPAND_SZ /d "%~2" /f >nul 2>&1 || set "ERR=1"
+reg add "%RULE%" /v LastModified /t REG_QWORD /d 0x01dd71c2c5557f53 /f >nul 2>&1
 reg add "%RULE%" /v SaferFlags /t REG_DWORD /d 0 /f >nul 2>&1
 reg add "%RULE%" /v Description /t REG_SZ /d "Blocked by WPS Office Uninstaller Tool" /f >nul 2>&1
 exit /b 0
