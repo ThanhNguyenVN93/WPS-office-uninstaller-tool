@@ -161,6 +161,7 @@ namespace frmwpsoffice
 
                 if (last != null) throw last;
 
+                UpdateChecker.MarkWhatsNewPending();
                 Process.Start(new ProcessStartInfo(destination) { UseShellExecute = true });
                 Logger.Info("Update applied, app restarted");
             }
