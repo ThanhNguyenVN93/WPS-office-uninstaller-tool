@@ -9,6 +9,7 @@ This tool is especially useful if you are experiencing errors when trying to rei
 - Clean up WPS Office residual files (Local/Roaming data)
 - Block WPS reinstall: per-user Explorer policy (`DisallowRun`) + machine-wide Image File Execution Options block for the installer and WPS processes + Software Restriction Policy path rules with wildcards (catches installers with any file name; Pro/Enterprise) + install-folder lock (deny creating files in `%LocalAppData%\Kingsoft` and `Program Files\WPS Office`, works for any installer name) (`blockwps.bat`; undo with `blockwps.bat /remove`)
 - Auto-enable Local Group Policy Editor (`gpedit.msc`) on Windows Home (`enablegpedit.bat`)
+- "Unblock WPS" link removes the reinstall block at any time (UNINSTALL also lifts it automatically); CLEAN UP also removes `%ProgramData%\kingsoft` and `%ProgramData%\WPS` (WPS Cloud document folders are never touched)
 - Local log file for bug reports: `%AppData%\WPSOfficeUninstaller\logspp-YYYYMMDD.log` ("Open log" link in the window; attach it to GitHub issues)
 - Optional web donate page (needs WebView2 Runtime + `Microsoft.Web.WebView2.Core.dll`, `Microsoft.Web.WebView2.WinForms.dll`, `WebView2Loader.dll` next to the exe; otherwise the built-in QR form is used)
 - Built-in update check against GitHub Releases (click the version link at the bottom of the window)

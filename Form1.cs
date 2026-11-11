@@ -195,6 +195,31 @@ namespace frmwpsoffice
             }
         }
 
+        private async void linkunblock_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            if (MessageBox.Show("Remove the WPS block so WPS Office can be installed again?", "Unblock WPS",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+            linkunblock.Enabled = false;
+            try
+            {
+                string sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+                int rc = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent /remove {sid}");
+                Logger.Info("Unblock requested by user: rc=" + rc);
+                if (IsDisposed) return;
+                MessageBox.Show(
+                    rc == 0 ? "WPS block removed. Restart the computer to fully apply."
+                    : rc == -2 ? "Skipped - administrator permission was denied."
+                    : "Could not remove the block completely. See the log.",
+                    "Unblock WPS", MessageBoxButtons.OK, rc == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                CheckWPSInstallLocation();
+            }
+            finally
+            {
+                if (!IsDisposed) linkunblock.Enabled = true;
+            }
+        }
+
         private void linklog_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             Logger.OpenFolder();

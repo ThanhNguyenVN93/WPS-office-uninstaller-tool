@@ -78,6 +78,10 @@ call :srp_add 06 "*\konlinesetup*.exe"
 call :srp_add 03 "*\Kingsoft\WPS Office\*"
 call :srp_add 04 "*\WPS Office\*"
 
+:: 4a. Machine-wide leftovers of earlier installs (configuration only). The user's WPS Cloud document
+::     folders are deliberately NOT touched.
+for %%D in ("%ProgramData%\kingsoft" "%ProgramData%\WPS") do if exist "%%~D\" rd /s /q "%%~D" >nul 2>&1
+
 :: 4. Install-path lock (works for any installer file name and any Windows edition). A deny ACL on the
 ::    folder was NOT enough (the installer still wrote into Program Files), so occupy the path with a
 ::    read-only placeholder FILE: no installer, whatever account it runs as, can create a folder there.
@@ -117,9 +121,18 @@ exit /b 0
 
 :lock_path
 :: %1 = path WPS installs into, %2 = SID. Remove any leftover folder, then put a read-only placeholder FILE there.
-if exist "%~1\" rd /s /q "%~1" >nul 2>&1
-if exist "%~1\" goto :lock_fallback
-if not exist "%~1" type nul > "%~1" 2>nul
+:: NOTE: 'if exist "path\"' is also TRUE for a file, so folder vs file is decided by the attribute string (first char 'd').
+set "ATTR="
+for %%I in ("%~1") do set "ATTR=%%~aI"
+if not defined ATTR goto :lock_make
+if /i not "%ATTR:~0,1%"=="d" goto :lock_attr
+rd /s /q "%~1" >nul 2>&1
+set "ATTR="
+for %%I in ("%~1") do set "ATTR=%%~aI"
+if defined ATTR goto :lock_fallback
+:lock_make
+type nul > "%~1" 2>nul
+:lock_attr
 attrib +r +s +h "%~1" >nul 2>&1
 exit /b 0
 :lock_fallback
@@ -129,9 +142,11 @@ exit /b 0
 
 :unlock_path
 :: %1 = path, %2 = SID. Undo lock_path: drop our empty placeholder file or the deny entries on a folder.
-if exist "%~1\" goto :unlock_dir
-if exist "%~1" attrib -r -s -h "%~1" >nul 2>&1
-for %%I in ("%~1") do if exist "%%~fI" if "%%~zI"=="0" del /f /q "%~1" >nul 2>&1
+set "ATTR="
+for %%I in ("%~1") do set "ATTR=%%~aI"
+if not defined ATTR exit /b 0
+if /i "%ATTR:~0,1%"=="d" goto :unlock_dir
+for %%I in ("%~1") do if "%%~zI"=="0" (attrib -r -s -h "%~1" >nul 2>&1 & del /f /q "%~1" >nul 2>&1)
 exit /b 0
 :unlock_dir
 icacls "%~1" /remove:d "*S-1-5-32-544" >nul 2>&1
