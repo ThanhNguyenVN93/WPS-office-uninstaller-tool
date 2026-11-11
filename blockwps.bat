@@ -78,13 +78,13 @@ call :srp_add 06 "*\konlinesetup*.exe"
 call :srp_add 03 "*\Kingsoft\WPS Office\*"
 call :srp_add 04 "*\WPS Office\*"
 
-:: 4. Install-folder lock (works for any installer file name and any Windows edition):
-::    create the folders WPS installs into and deny creating files / sub-folders in them.
-call :acl_deny "%LAD%\Kingsoft" "%SID%"
-call :acl_deny "%ProgramFiles%\WPS Office" "S-1-5-32-545"
-call :acl_deny "%ProgramFiles%\WPS Office" "S-1-5-32-544"
-if exist "%ProgramFiles(x86)%\" call :acl_deny "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-545"
-if exist "%ProgramFiles(x86)%\" call :acl_deny "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-544"
+:: 4. Install-path lock (works for any installer file name and any Windows edition). A deny ACL on the
+::    folder was NOT enough (the installer still wrote into Program Files), so occupy the path with a
+::    read-only placeholder FILE: no installer, whatever account it runs as, can create a folder there.
+::    Leftover WPS folders are removed first; if that fails we fall back to the deny ACL.
+call :lock_path "%LAD%\Kingsoft" "%SID%"
+call :lock_path "%ProgramFiles%\WPS Office" "S-1-5-32-545"
+if exist "%ProgramFiles(x86)%\" call :lock_path "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-545"
 
 if "%ERR%"=="0" (
     ECHO WPS Office applications are now blocked. Restart the computer to apply all policies.
@@ -100,11 +100,9 @@ for %%E in (%APPS%) do (
     reg delete "%IFEO%\%%E" /v Debugger /f /reg:32 >nul 2>&1
 )
 for %%N in (01 02 03 04 05 06) do reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers\0\Paths\{7a1d0c00-5a11-4f00-9a00-0000000000%%N}" /f >nul 2>&1
-call :acl_allow "%LAD%\Kingsoft" "%SID%"
-call :acl_allow "%ProgramFiles%\WPS Office" "S-1-5-32-545"
-call :acl_allow "%ProgramFiles%\WPS Office" "S-1-5-32-544"
-if exist "%ProgramFiles(x86)%\" call :acl_allow "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-545"
-if exist "%ProgramFiles(x86)%\" call :acl_allow "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-544"
+call :unlock_path "%LAD%\Kingsoft" "%SID%"
+call :unlock_path "%ProgramFiles%\WPS Office" "S-1-5-32-545"
+if exist "%ProgramFiles(x86)%\" call :unlock_path "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-545"
 ECHO WPS Office block removed.
 
 :end
@@ -117,8 +115,27 @@ if not exist "%~1" md "%~1" >nul 2>&1
 icacls "%~1" /deny "*%~2:(OI)(CI)(WD,AD,WEA)" >nul 2>&1 || set "ERR=1"
 exit /b 0
 
-:acl_allow
-:: %1 = folder, %2 = SID. Remove our deny entry and drop the folder again if it is empty.
+:lock_path
+:: %1 = path WPS installs into, %2 = SID. Remove any leftover folder, then put a read-only placeholder FILE there.
+if exist "%~1\" rd /s /q "%~1" >nul 2>&1
+if exist "%~1\" goto :lock_fallback
+if not exist "%~1" type nul > "%~1" 2>nul
+attrib +r +s +h "%~1" >nul 2>&1
+exit /b 0
+:lock_fallback
+call :acl_deny "%~1" "%~2"
+call :acl_deny "%~1" "S-1-5-32-544"
+exit /b 0
+
+:unlock_path
+:: %1 = path, %2 = SID. Undo lock_path: drop our empty placeholder file or the deny entries on a folder.
+if exist "%~1\" goto :unlock_dir
+if exist "%~1" attrib -r -s -h "%~1" >nul 2>&1
+for %%I in ("%~1") do if exist "%%~fI" if "%%~zI"=="0" del /f /q "%~1" >nul 2>&1
+exit /b 0
+:unlock_dir
+icacls "%~1" /remove:d "*S-1-5-32-544" >nul 2>&1
+icacls "%~1" /remove:d "*S-1-5-32-545" >nul 2>&1
 icacls "%~1" /remove:d "*%~2" >nul 2>&1
 rd "%~1" >nul 2>&1
 exit /b 0

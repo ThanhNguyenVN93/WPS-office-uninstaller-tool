@@ -52,7 +52,7 @@ namespace frmwpsoffice
             string programfilesx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
             string wpsProgramFilesRoot = Path.Combine(programfiles, "WPS Office");
-            if (File.Exists(Path.Combine(wpsProgramFilesRoot, "ksolaunch.exe")))
+            if (FindFileRecursively(wpsProgramFilesRoot, "ksolaunch.exe") != null)
             {
                 txtcheck.Text = "WPS Office exists in Program Files.";
                 txtdirect.Text = wpsProgramFilesRoot;
@@ -60,7 +60,7 @@ namespace frmwpsoffice
             }
 
             string wpsProgramFilesX86Root = Path.Combine(programfilesx86, "WPS Office");
-            if (File.Exists(Path.Combine(wpsProgramFilesX86Root, "ksolaunch.exe")))
+            if (FindFileRecursively(wpsProgramFilesX86Root, "ksolaunch.exe") != null)
             {
                 txtcheck.Text = "WPS Office exists in Program Files (x86).";
                 txtdirect.Text = wpsProgramFilesX86Root;
