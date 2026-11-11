@@ -278,7 +278,7 @@ namespace frmwpsoffice
                 txtcheck.Text = "Lifting WPS block before uninstall...";
                 btnuninstall.Enabled = false;
                 string sid0 = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
-                int rc = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent /remove {sid0}");
+                int rc = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent /remove {sid0} \"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}\"");
                 Logger.Info("Lifted WPS block before uninstall: rc=" + rc);
                 if (IsDisposed) return;
                 btnuninstall.Enabled = true;
@@ -475,7 +475,7 @@ namespace frmwpsoffice
 
                 // Pass the real user's SID so the per-user policy is written to the right hive even if UAC elevates another admin account.
                 string sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
-                int blockCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent {sid}");
+                int blockCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent {sid} \"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}\"");
 
                 txtcheck.Text = "Enabling Group Policy Editor...";
                 // Make sure the Local Group Policy Editor exists (Windows Home) so the block policy can be reviewed/managed.

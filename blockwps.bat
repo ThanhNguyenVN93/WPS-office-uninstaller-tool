@@ -13,6 +13,7 @@ for %%A in (%*) do (
     if /i "%%~A"=="/silent" set "SILENT=1"
     if /i "%%~A"=="/remove" set "REMOVE=1"
     echo %%~A| findstr /b /i "S-1-5-" >nul && set "SID=%%~A"
+    echo %%~A| findstr /r /i "^[A-Z]:[\\]" >nul && set "LAD=%%~A"
 )
 
 ECHO ===================================================
@@ -35,6 +36,10 @@ set "IFEO=HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution
 :: Installer + every WPS process that could (re)install or start it
 set "APPS=wps_office_inst.exe wpscenter.exe wpscloudsvr.exe wpsupdate.exe ksolaunch.exe wps.exe et.exe wpp.exe wpspdf.exe"
 set "ERR=0"
+
+:: Install folders: per-user LocalAppData of the real user (passed in) and Program Files.
+if not defined LAD set "LAD=%LOCALAPPDATA%"
+if not defined SID for /f "tokens=2 delims=," %%s in ('whoami /user /fo csv /nh') do set "SID=%%~s"
 
 if "%REMOVE%"=="1" goto :remove
 
@@ -70,6 +75,14 @@ call :srp_add 06 "*\konlinesetup*.exe"
 call :srp_add 03 "*\Kingsoft\WPS Office\*"
 call :srp_add 04 "*\WPS Office\*"
 
+:: 4. Install-folder lock (works for any installer file name and any Windows edition):
+::    create the folders WPS installs into and deny creating files / sub-folders in them.
+call :acl_deny "%LAD%\Kingsoft" "%SID%"
+call :acl_deny "%ProgramFiles%\WPS Office" "S-1-5-32-545"
+call :acl_deny "%ProgramFiles%\WPS Office" "S-1-5-32-544"
+if exist "%ProgramFiles(x86)%\" call :acl_deny "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-545"
+if exist "%ProgramFiles(x86)%\" call :acl_deny "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-544"
+
 if "%ERR%"=="0" (
     ECHO WPS Office applications are now blocked. Restart the computer to apply all policies.
 ) else (
@@ -84,11 +97,28 @@ for %%E in (%APPS%) do (
     reg delete "%IFEO%\%%E" /v Debugger /f /reg:32 >nul 2>&1
 )
 for %%N in (01 02 03 04 05 06) do reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers\0\Paths\{7a1d0c00-5a11-4f00-9a00-0000000000%%N}" /f >nul 2>&1
+call :acl_allow "%LAD%\Kingsoft" "%SID%"
+call :acl_allow "%ProgramFiles%\WPS Office" "S-1-5-32-545"
+call :acl_allow "%ProgramFiles%\WPS Office" "S-1-5-32-544"
+if exist "%ProgramFiles(x86)%\" call :acl_allow "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-545"
+if exist "%ProgramFiles(x86)%\" call :acl_allow "%ProgramFiles(x86)%\WPS Office" "S-1-5-32-544"
 ECHO WPS Office block removed.
 
 :end
 if "%SILENT%"=="0" pause
 exit /b %ERR%
+
+:acl_deny
+:: %1 = folder, %2 = SID. Deny creating files / sub-folders (reading and deleting the empty folder stay possible).
+if not exist "%~1" md "%~1" >nul 2>&1
+icacls "%~1" /deny "*%~2:(OI)(CI)(WD,AD,WEA)" >nul 2>&1 || set "ERR=1"
+exit /b 0
+
+:acl_allow
+:: %1 = folder, %2 = SID. Remove our deny entry and drop the folder again if it is empty.
+icacls "%~1" /remove:d "*%~2" >nul 2>&1
+rd "%~1" >nul 2>&1
+exit /b 0
 
 :srp_add
 :: %1 = rule number (2 digits), %2 = path pattern
