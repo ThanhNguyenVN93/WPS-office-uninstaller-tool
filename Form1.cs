@@ -67,6 +67,17 @@ namespace frmwpsoffice
                 return;
             }
 
+            // Older WPS builds: <Program Files>\Kingsoft\WPS Office
+            foreach (string oldRoot in new[] { Path.Combine(programfiles, "Kingsoft", "WPS Office"), Path.Combine(programfilesx86, "Kingsoft", "WPS Office") })
+            {
+                if (FindFileRecursively(oldRoot, "ksolaunch.exe") != null)
+                {
+                    txtcheck.Text = "WPS Office exists in Program Files (Kingsoft).";
+                    txtdirect.Text = oldRoot;
+                    return;
+                }
+            }
+
             txtcheck.Text = "WPS Office not found. Move to Clean Up Kingsoft residual data Mode.";
             
             txtdirect.Text = Path.Combine(appdata, "Kingsoft");
