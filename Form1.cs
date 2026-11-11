@@ -244,6 +244,10 @@ namespace frmwpsoffice
                     if (k != null && (k.GetValue("wps.exe") != null || k.GetValue("wps_office_inst.exe") != null))
                         return true;
                 }
+                using (var hk = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers\0\Paths\{7a1d0c00-5a11-4f00-9a00-000000000001}"))
+                {
+                    if (hk != null) return true;
+                }
                 foreach (var view in new[] { Microsoft.Win32.RegistryView.Registry64, Microsoft.Win32.RegistryView.Registry32 })
                 using (var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, view))
                 using (var k = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\wps.exe"))
@@ -311,6 +315,31 @@ namespace frmwpsoffice
             {
                 txtcheck.Text = "Error: Cannot find uninst.exe in installation folder.";
             }
+        }
+
+        /// <summary>Kills this session's explorer.exe, deletes the folder right away (before the shell reloads its extensions), then makes sure the shell is back.</summary>
+        private static bool RestartExplorerAndDelete(string path)
+        {
+            int session = Process.GetCurrentProcess().SessionId;
+            Logger.Info("Restarting Explorer to release locked WPS files");
+            foreach (Process p in Process.GetProcessesByName("explorer").Where(x => x.SessionId == session).ToList())
+            {
+                try { p.Kill(); p.WaitForExit(3000); }
+                catch (Exception ex) { Logger.Warn("Cannot stop explorer.exe: " + ex.Message); }
+            }
+
+            int failed = DeleteTreeForce(path);
+            bool ok = failed == 0 && !Directory.Exists(path);
+            Logger.Info("Delete after Explorer restart: " + (ok ? "OK" : failed + " item(s) left"));
+
+            // Windows normally respawns the shell by itself; start it only if that did not happen.
+            for (int i = 0; i < 10; i++)
+            {
+                if (Process.GetProcessesByName("explorer").Any(x => x.SessionId == session)) return ok;
+                System.Threading.Thread.Sleep(500);
+            }
+            try { Process.Start("explorer.exe"); } catch (Exception ex) { Logger.Warn("Cannot start explorer.exe: " + ex.Message); }
+            return ok;
         }
 
         /// <summary>Deletes a directory tree best-effort (clears read-only flags). Returns the number of items that could not be removed.</summary>
@@ -394,6 +423,19 @@ namespace frmwpsoffice
                     txtcheck.Text = $"Retrying ({attempt}/{MaxRetries}): some files are locked...";
                     Application.DoEvents();
                     System.Threading.Thread.Sleep(800);
+                }
+            }
+
+            // Typical leftover: WPS shell-extension DLLs (qingshellext64.dll_d_*, kbaseconfigcenter64.dll_d_*) mapped into explorer.exe.
+            if (Directory.Exists(kingsoftLocalPath))
+            {
+                DialogResult dr = MessageBox.Show(
+                    "Some WPS files are locked by Windows Explorer (WPS shell extension). Restart Windows Explorer to release them? The taskbar will disappear for a few seconds.",
+                    "Files in use", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (dr == DialogResult.Yes && RestartExplorerAndDelete(kingsoftLocalPath))
+                {
+                    txtcheck.Text = "Local data deleted successfully (Explorer restarted).";
+                    return true;
                 }
             }
 

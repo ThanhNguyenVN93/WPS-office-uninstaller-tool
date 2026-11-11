@@ -7,7 +7,7 @@ This tool is especially useful if you are experiencing errors when trying to rei
 ✨ Key Features: Support users to uninstall WPS Office
 
 - Clean up WPS Office residual files (Local/Roaming data)
-- Block WPS reinstall: per-user Explorer policy (`DisallowRun`) + machine-wide Image File Execution Options block for the installer and WPS processes (`blockwps.bat`; undo with `blockwps.bat /remove`)
+- Block WPS reinstall: per-user Explorer policy (`DisallowRun`) + machine-wide Image File Execution Options block for the installer and WPS processes + Software Restriction Policy path rules with wildcards (catches installers with any file name; Pro/Enterprise) (`blockwps.bat`; undo with `blockwps.bat /remove`)
 - Auto-enable Local Group Policy Editor (`gpedit.msc`) on Windows Home (`enablegpedit.bat`)
 - Local log file for bug reports: `%AppData%\WPSOfficeUninstaller\logspp-YYYYMMDD.log` ("Open log" link in the window; attach it to GitHub issues)
 - Optional web donate page (needs WebView2 Runtime + `Microsoft.Web.WebView2.Core.dll`, `Microsoft.Web.WebView2.WinForms.dll`, `WebView2Loader.dll` next to the exe; otherwise the built-in QR form is used)
