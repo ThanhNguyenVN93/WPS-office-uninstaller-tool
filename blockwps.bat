@@ -86,7 +86,10 @@ if exist "%ProgramData%\WPS" rd /s /q "%ProgramData%\WPS" >nul 2>&1
 ::    folder was NOT enough (the installer still wrote into Program Files), so occupy the path with a
 ::    read-only placeholder FILE: no installer, whatever account it runs as, can create a folder there.
 ::    Leftover WPS folders are removed first; if that fails we fall back to the deny ACL.
+:: Roaming profile folder = same profile as LAD (...\AppData\Local -> ...\AppData\Roaming); the installer writes its config there.
+set "RAD=%LAD:~0,-5%Roaming"
 call :lock_path "%LAD%\Kingsoft" "%SID%"
+call :lock_path "%RAD%\kingsoft" "%SID%"
 call :lock_path "%ProgramData%\kingsoft" "%SID%"
 call :lock_path "%ProgramFiles%\WPS Office" "S-1-5-32-545"
 call :lock_kingsoft "%ProgramFiles%"
@@ -107,7 +110,9 @@ for %%E in (%APPS%) do (
     reg delete "%IFEO%\%%E" /v Debugger /f /reg:32 >nul 2>&1
 )
 for %%N in (01 02 03 04 05 06) do reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers\0\Paths\{7a1d0c00-5a11-4f00-9a00-0000000000%%N}" /f >nul 2>&1
+set "RAD=%LAD:~0,-5%Roaming"
 call :unlock_path "%LAD%\Kingsoft" "%SID%"
+call :unlock_path "%RAD%\kingsoft" "%SID%"
 call :unlock_path "%ProgramData%\kingsoft" "%SID%"
 call :unlock_path "%ProgramFiles%\WPS Office" "S-1-5-32-545"
 call :unlock_kingsoft "%ProgramFiles%"
