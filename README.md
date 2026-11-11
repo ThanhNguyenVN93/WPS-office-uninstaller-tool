@@ -19,7 +19,7 @@ This tool is especially useful if you are experiencing errors when trying to rei
 
 Permissions: Administrator privileges are required to perform the necessary uninstallation and Registry modifications.
 
-💻 How to Use (Installation & Execution): Download and run the Tool (pre-built exe is in the `dist/` folder and on the Releases page)
+💻 How to Use (Installation & Execution): Download and run the Tool (pre-built exe: see the [Releases page](https://github.com/ThanhNguyenVN93/WPS-office-uninstaller-tool/releases/latest))
 
 ⚠️ Warnings and Important Notes
 Use with Caution: This tool makes direct modifications to system folders and the Windows Registry. Please use it responsibly and as intended.
