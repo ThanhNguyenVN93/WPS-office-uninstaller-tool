@@ -1,26 +1,70 @@
 @echo off
+setlocal EnableExtensions EnableDelayedExpansion
+:: Usage: blockwps.bat [/silent] [/remove] [<user SID>]
+::   /silent  no pause at the end (used by the app)
+::   /remove  remove the block again
+::   SID      write the per-user policy into that user's hive instead of HKCU
+:: Exit codes: 0 = OK, 1 = error / not admin
+
+set "SILENT=0"
+set "REMOVE=0"
+set "SID="
+for %%A in (%*) do (
+    if /i "%%~A"=="/silent" set "SILENT=1"
+    if /i "%%~A"=="/remove" set "REMOVE=1"
+    echo %%~A| findstr /b /i "S-1-5-" >nul && set "SID=%%~A"
+)
+
 ECHO ===================================================
-ECHO Activating WPS application blocking via Registry
-ECHO NOTE: This file must be run with Admin privileges!
+ECHO WPS Office blocking (Explorer policy + IFEO)
+ECHO NOTE: This file must be run with Admin privileges.
 ECHO ===================================================
 
-:: 1. Enable "Don't run specific windows applications" feature (DisallowRun = 1)
-:: Policy is stored at: HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer
-REG ADD "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v "DisallowRun" /t REG_DWORD /d 1 /f
+net session >nul 2>&1 && goto :admin_ok
+ECHO ERROR: Please run as Administrator.
+if "%SILENT%"=="0" pause
+exit /b 1
+:admin_ok
 
-:: 2. Create a subkey to list the blocked applications
-REG ADD "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowRun" /f
+:: Per-user policy root: the real logged-in user (when elevated by another admin) or HKCU.
+set "ROOT=HKCU"
+if defined SID reg query "HKU\%SID%" >nul 2>&1 && set "ROOT=HKU\%SID%"
 
-:: 3. Add WPS .exe files to the block list (Using sequential numbers: 1, 2, 3...)
+set "POL=%ROOT%\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+set "IFEO=HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options"
+:: Installer + every WPS process that could (re)install or start it
+set "APPS=wps_office_inst.exe wpscenter.exe wpscloudsvr.exe wpsupdate.exe ksolaunch.exe wps.exe et.exe wpp.exe wpspdf.exe"
+set "ERR=0"
 
-:: Block the installer file
-REG ADD "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowRun" /v 1 /t REG_SZ /d "wps_office_inst.exe" /f
+if "%REMOVE%"=="1" goto :remove
 
-:: Block the background/notification process
-REG ADD "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowRun" /v 2 /t REG_SZ /d "wpscenter.exe" /f
+:: 1. Per-user "Don't run specified Windows applications" (Group Policy: DisallowRun)
+reg add "%POL%" /v DisallowRun /t REG_DWORD /d 1 /f >nul 2>&1 || set "ERR=1"
+for %%E in (%APPS%) do (
+    reg add "%POL%\DisallowRun" /v "%%E" /t REG_SZ /d "%%E" /f >nul 2>&1 || set "ERR=1"
+)
 
-ECHO.
-ECHO WPS Office applications have been added to the Registry block list.
-ECHO You must log out/log back in or restart the computer for the changes to take effect.
-ECHO.
-pause
+:: 2. Machine-wide block via Image File Execution Options (also stops cmd/PowerShell launches)
+for %%E in (%APPS%) do (
+    reg add "%IFEO%\%%E" /v Debugger /t REG_SZ /d "cmd.exe /c exit" /f /reg:64 >nul 2>&1 || set "ERR=1"
+    reg add "%IFEO%\%%E" /v Debugger /t REG_SZ /d "cmd.exe /c exit" /f /reg:32 >nul 2>&1 || set "ERR=1"
+)
+
+if "%ERR%"=="0" (
+    ECHO WPS Office applications are now blocked. Log out/in to apply the Explorer policy.
+) else (
+    ECHO Some registry entries could not be written.
+)
+goto :end
+
+:remove
+for %%E in (%APPS%) do (
+    reg delete "%POL%\DisallowRun" /v "%%E" /f >nul 2>&1
+    reg delete "%IFEO%\%%E" /v Debugger /f /reg:64 >nul 2>&1
+    reg delete "%IFEO%\%%E" /v Debugger /f /reg:32 >nul 2>&1
+)
+ECHO WPS Office block removed.
+
+:end
+if "%SILENT%"=="0" pause
+exit /b %ERR%

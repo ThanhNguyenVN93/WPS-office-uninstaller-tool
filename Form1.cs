@@ -294,7 +294,7 @@ namespace frmwpsoffice
                 }
             }
         }
-        private void btncleanup_Click_1(object sender, EventArgs e)
+        private async void btncleanup_Click_1(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(txtdirect.Text))
             {
@@ -310,47 +310,71 @@ namespace frmwpsoffice
 
             if (result != DialogResult.Yes) return;
 
-            CleanWPSResidualFiles();
-            string localStatus = txtcheck.Text;
-
-            bool roamingSuccess = CleanWPSRoamingData();
-
-            if (roamingSuccess)
+            btncleanup.Enabled = false;
+            btnuninstall.Enabled = false;
+            try
             {
-                txtcheck.Text = "All cleanup completed!";
+                CleanWPSResidualFiles();
 
-                try
+                bool roamingSuccess = CleanWPSRoamingData();
+                if (!roamingSuccess)
                 {
-                    RunEmbeddedBatchFile("frmwpsoffice.blockwps.bat");
-                    // Make sure the Local Group Policy Editor exists (Windows Home) so the block policy can be reviewed/managed.
-                    RunEmbeddedBatchFile("frmwpsoffice.enablegpedit.bat");
-                    MessageBox.Show("Cleanup and blocking completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch
-                {
-                    MessageBox.Show("Cleanup completed but could not run block script.", "Partial Success", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    txtcheck.Text += "\nWarning: Some data could not be cleaned.";
+                    return;
                 }
 
+                txtcheck.Text = "Cleanup done. Applying WPS block...";
+
+                // Pass the real user's SID so the per-user policy is written to the right hive even if UAC elevates another admin account.
+                string sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+                int blockCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent {sid}");
+
+                txtcheck.Text = "Enabling Group Policy Editor...";
+                // Make sure the Local Group Policy Editor exists (Windows Home) so the block policy can be reviewed/managed.
+                int gpCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.enablegpedit.bat", "/silent");
+
+                string blockMsg = blockCode == 0 ? "OK - WPS is blocked (log out/in to fully apply)"
+                    : blockCode == -2 ? "Skipped - administrator permission was denied"
+                    : "FAILED - some block entries could not be written";
+                string gpMsg = gpCode == 0 ? "OK - gpedit.msc is available"
+                    : gpCode == 2 ? "Restart the computer, then check gpedit.msc again"
+                    : gpCode == -2 ? "Skipped - administrator permission was denied"
+                    : "FAILED - this Windows edition may not support gpedit.msc (blocking still works)";
+
+                bool allOk = blockCode == 0 && gpCode == 0;
+                txtcheck.Text = allOk ? "All cleanup completed!" : "Cleanup completed with warnings.";
+                MessageBox.Show(
+                    "Local data cleanup: OK\nWPS block: " + blockMsg + "\nGroup Policy Editor: " + gpMsg,
+                    allOk ? "Success" : "Completed with warnings",
+                    MessageBoxButtons.OK,
+                    allOk ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
                 Application.Exit();
             }
-            else
+            finally
             {
-                txtcheck.Text += "\nWarning: Some data could not be cleaned.";
+                if (!IsDisposed)
+                {
+                    btncleanup.Enabled = true;
+                    btnuninstall.Enabled = true;
+                }
             }
         }
 
-        public static void RunEmbeddedBatchFile(string resourceName, string arguments = "")
+        /// <summary>
+        /// Extracts an embedded batch file to a unique temp file, runs it elevated and waits for it.
+        /// Returns the script exit code, -1 on internal error, -2 when the UAC prompt was declined.
+        /// </summary>
+        public static async Task<int> RunEmbeddedBatchFileAsync(string resourceName, string arguments = "")
         {
-            Assembly assembly = Assembly.GetExecutingAssembly();
-            string tempFilePath = Path.Combine(Path.GetTempPath(), Path.GetFileName(resourceName));
+            string tempFilePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".bat");
             try
             {
-                using (Stream stream = assembly.GetManifestResourceStream(resourceName))
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
                 {
                     if (stream == null)
                     {
                         MessageBox.Show($"Embedded resource not found: {resourceName}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
+                        return -1;
                     }
                     using (FileStream fileStream = File.Create(tempFilePath))
                     {
@@ -363,13 +387,32 @@ namespace frmwpsoffice
                     FileName = tempFilePath,
                     Arguments = arguments,
                     UseShellExecute = true,
-                    Verb = "runas"
+                    Verb = "runas",
+                    WindowStyle = ProcessWindowStyle.Hidden
                 };
-                Process.Start(startInfo);
+
+                return await Task.Run(() =>
+                {
+                    using (Process p = Process.Start(startInfo))
+                    {
+                        if (p == null) return -1;
+                        p.WaitForExit();
+                        return p.ExitCode;
+                    }
+                });
+            }
+            catch (Win32Exception wex) when (wex.NativeErrorCode == 1223)
+            {
+                return -2; // user cancelled UAC
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Error running batch file: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return -1;
+            }
+            finally
+            {
+                try { File.Delete(tempFilePath); } catch { }
             }
         }
     }
