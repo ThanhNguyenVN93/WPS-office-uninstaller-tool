@@ -29,7 +29,7 @@ namespace frmwpsoffice
             {
                 return Directory.GetFiles(rootPath, fileName, SearchOption.AllDirectories).FirstOrDefault();
             }
-            catch { return null; }
+            catch (Exception ex) { Logger.Error("Search failed in " + rootPath, ex); return null; }
         }
 
         // -------------------------------------------------------------
@@ -52,7 +52,7 @@ namespace frmwpsoffice
             string programfilesx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
             string wpsProgramFilesRoot = Path.Combine(programfiles, "WPS Office");
-            if (File.Exists(Path.Combine(wpsProgramFilesRoot, "ksolaunch.exe")))
+            if (FindFileRecursively(wpsProgramFilesRoot, "ksolaunch.exe") != null)
             {
                 txtcheck.Text = "WPS Office exists in Program Files.";
                 txtdirect.Text = wpsProgramFilesRoot;
@@ -60,7 +60,7 @@ namespace frmwpsoffice
             }
 
             string wpsProgramFilesX86Root = Path.Combine(programfilesx86, "WPS Office");
-            if (File.Exists(Path.Combine(wpsProgramFilesX86Root, "ksolaunch.exe")))
+            if (FindFileRecursively(wpsProgramFilesX86Root, "ksolaunch.exe") != null)
             {
                 txtcheck.Text = "WPS Office exists in Program Files (x86).";
                 txtdirect.Text = wpsProgramFilesX86Root;
@@ -95,7 +95,7 @@ namespace frmwpsoffice
                             }
                             catch
                             {
-                                // Skip if no permission
+                                Logger.Warn("Cannot kill process id " + p.Id + " (no permission?)");
                             }
                         }
                     }
@@ -110,6 +110,7 @@ namespace frmwpsoffice
             }
             catch (Exception ex)
             {
+                Logger.Error("KillWPSProcess failed", ex);
                 txtcheck.Text = $"Warning: {ex.Message}";
             }
         }
@@ -123,9 +124,9 @@ namespace frmwpsoffice
                 try
                 { Directory.Delete(kingsoftRoamingPath, true); return true; }
                 catch (UnauthorizedAccessException authEx)
-                { txtcheck.Text = $"Access permission Roaming error: Need run Admin permission. ({authEx.Message})"; return false; }
+                { Logger.Error("Roaming cleanup: access denied", authEx); txtcheck.Text = $"Access permission Roaming error: Need run Admin permission. ({authEx.Message})"; return false; }
                 catch (Exception ex)
-                { txtcheck.Text = $"Error when deleting Roaming data: {ex.Message}"; return false; }
+                { Logger.Error("Roaming cleanup failed", ex); txtcheck.Text = $"Error when deleting Roaming data: {ex.Message}"; return false; }
             }
             return true;
         }
@@ -150,6 +151,7 @@ namespace frmwpsoffice
             }
 
             CheckWPSInstallLocation();
+            Logger.Info("Scan: " + txtcheck.Text + " | dir=" + txtdirect.Text);
 
             linkupdate.Text = $"v{UpdateChecker.CurrentVersion.ToString(3)} - Check for updates";
             _ = CheckForUpdateAsync(false);
@@ -174,6 +176,7 @@ namespace frmwpsoffice
 
                 if (info.IsNewer)
                 {
+                    Logger.Info("Update available: " + info.Tag);
                     linkupdate.Text = $"New version {info.Tag} available!";
                     DialogResult r = MessageBox.Show(
                         $"A new version is available: {info.Tag} (current: v{UpdateChecker.CurrentVersion.ToString(3)}).\n\nOpen the download page?",
@@ -192,6 +195,36 @@ namespace frmwpsoffice
             }
         }
 
+        private async void linkunblock_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            if (MessageBox.Show("Remove the WPS block so WPS Office can be installed again?", "Unblock WPS",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+            linkunblock.Enabled = false;
+            try
+            {
+                string sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+                int rc = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent /remove {sid}");
+                Logger.Info("Unblock requested by user: rc=" + rc);
+                if (IsDisposed) return;
+                MessageBox.Show(
+                    rc == 0 ? "WPS block removed. Restart the computer to fully apply."
+                    : rc == -2 ? "Skipped - administrator permission was denied."
+                    : "Could not remove the block completely. See the log.",
+                    "Unblock WPS", MessageBoxButtons.OK, rc == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                CheckWPSInstallLocation();
+            }
+            finally
+            {
+                if (!IsDisposed) linkunblock.Enabled = true;
+            }
+        }
+
+        private void linklog_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            Logger.OpenFolder();
+        }
+
         private void linkupdate_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             _ = CheckForUpdateAsync(true);
@@ -201,13 +234,57 @@ namespace frmwpsoffice
         {
             if (!DonateSettings.DontShowAgain)
             {
+                Logger.Info("Closing (" + e.CloseReason + "): showing donate dialog");
+                if (NTDonate.DonateForm.IsWebView2Usable() && NTDonate.DonateForm.IsSiteReachable())
+                {
+                    try
+                    {
+                        using (NTDonate.DonateForm web = new NTDonate.DonateForm(false))
+                        {
+                            web.ShowDialog(this);
+                            if (web.DontShowAgain) DonateSettings.DontShowAgain = true;
+                        }
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Web donate form failed, using offline form", ex);
+                    }
+                }
+
+                // No WebView2 / offline / site unreachable: local QR form
                 using (frmDonate donateForm = new frmDonate())
                 {
                     donateForm.ShowDialog(this);
                 }
             }
         }
-        private void btnuninstall_Click(object sender, EventArgs e)
+        /// <summary>True when a block created by blockwps.bat is currently in the registry (readable without admin).</summary>
+        private static bool IsBlockActive()
+        {
+            try
+            {
+                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowRun"))
+                {
+                    if (k != null && (k.GetValue("wps.exe") != null || k.GetValue("wps_office_inst.exe") != null))
+                        return true;
+                }
+                using (var hk = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers\0\Paths\{7a1d0c00-5a11-4f00-9a00-000000000001}"))
+                {
+                    if (hk != null) return true;
+                }
+                foreach (var view in new[] { Microsoft.Win32.RegistryView.Registry64, Microsoft.Win32.RegistryView.Registry32 })
+                using (var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, view))
+                using (var k = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\wps.exe"))
+                {
+                    if (k != null && k.GetValue("Debugger") != null) return true;
+                }
+            }
+            catch (Exception ex) { Logger.Warn("IsBlockActive failed: " + ex.Message); }
+            return false;
+        }
+
+        private async void btnuninstall_Click(object sender, EventArgs e)
         {
             string wpsRootPath = txtdirect.Text;
             string uninstallerPath = null;
@@ -219,6 +296,24 @@ namespace frmwpsoffice
             }
 
             KillWPSProcess();
+            // A previous CLEAN UP leaves the WPS block active; the WPS uninstaller launches WPS components
+            // itself, so lift the block first (CLEAN UP re-applies it afterwards).
+            if (IsBlockActive())
+            {
+                txtcheck.Text = "Lifting WPS block before uninstall...";
+                btnuninstall.Enabled = false;
+                string sid0 = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+                int rc = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent /remove {sid0}");
+                Logger.Info("Lifted WPS block before uninstall: rc=" + rc);
+                if (IsDisposed) return;
+                btnuninstall.Enabled = true;
+                if (rc != 0)
+                {
+                    txtcheck.Text = "Could not lift the WPS block (admin permission needed). Uninstall may be restricted.";
+                    return;
+                }
+            }
+
             uninstallerPath = FindFileRecursively(wpsRootPath, "uninst.exe");
 
             if (uninstallerPath != null)
@@ -233,6 +328,7 @@ namespace frmwpsoffice
                         Verb = "runas"
                     };
                     Process.Start(startInfo);
+                    Logger.Info("Started uninstaller: " + uninstallerPath);
                     txtcheck.Text = "Running WPS Office Uninstaller (admin mode)...";
                 }
                 catch (Exception ex)
@@ -246,7 +342,66 @@ namespace frmwpsoffice
             }
         }
 
-        private void CleanWPSResidualFiles()
+        /// <summary>Kills this session's explorer.exe, deletes the folder right away (before the shell reloads its extensions), then makes sure the shell is back.</summary>
+        private static bool RestartExplorerAndDelete(string path)
+        {
+            int session = Process.GetCurrentProcess().SessionId;
+            Logger.Info("Restarting Explorer to release locked WPS files");
+            foreach (Process p in Process.GetProcessesByName("explorer").Where(x => x.SessionId == session).ToList())
+            {
+                try { p.Kill(); p.WaitForExit(3000); }
+                catch (Exception ex) { Logger.Warn("Cannot stop explorer.exe: " + ex.Message); }
+            }
+
+            int failed = DeleteTreeForce(path);
+            bool ok = failed == 0 && !Directory.Exists(path);
+            Logger.Info("Delete after Explorer restart: " + (ok ? "OK" : failed + " item(s) left"));
+
+            // Windows normally respawns the shell by itself; start it only if that did not happen.
+            for (int i = 0; i < 10; i++)
+            {
+                if (Process.GetProcessesByName("explorer").Any(x => x.SessionId == session)) return ok;
+                System.Threading.Thread.Sleep(500);
+            }
+            try { Process.Start("explorer.exe"); } catch (Exception ex) { Logger.Warn("Cannot start explorer.exe: " + ex.Message); }
+            return ok;
+        }
+
+        /// <summary>Deletes a directory tree best-effort (clears read-only flags). Returns the number of items that could not be removed.</summary>
+        private static int DeleteTreeForce(string dir)
+        {
+            int failed = 0;
+            try
+            {
+                foreach (string file in Directory.GetFiles(dir))
+                {
+                    try { File.SetAttributes(file, FileAttributes.Normal); File.Delete(file); }
+                    catch (Exception ex) { failed++; Logger.Warn("Cannot delete file " + file + ": " + ex.Message); }
+                }
+                foreach (string sub in Directory.GetDirectories(dir))
+                {
+                    // Do not follow junctions/symlinks, just drop the link itself.
+                    if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        try { Directory.Delete(sub, false); }
+                        catch (Exception ex) { failed++; Logger.Warn("Cannot remove link " + sub + ": " + ex.Message); }
+                        continue;
+                    }
+                    failed += DeleteTreeForce(sub);
+                }
+                File.SetAttributes(dir, FileAttributes.Normal);
+                Directory.Delete(dir, false);
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                Logger.Warn("Cannot delete folder " + dir + ": " + ex.Message);
+            }
+            return failed;
+        }
+
+        /// <summary>Returns true when the local Kingsoft data is gone afterwards.</summary>
+        private bool CleanWPSResidualFiles()
         {
             string appdata = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string kingsoftLocalPath = Path.Combine(appdata, "Kingsoft");
@@ -254,47 +409,65 @@ namespace frmwpsoffice
             if (!Directory.Exists(kingsoftLocalPath))
             {
                 txtcheck.Text = "Kingsoft folder not found (already clean).";
-                return;
+                return true;
             }
 
             KillWPSProcess();
-            System.Threading.Thread.Sleep(300);
-
-            const int MaxRetries = 3;
-            for (int attempt = 1; attempt <= MaxRetries; attempt++)
+            // The WPS uninstaller may still be running and holding files; stop it too.
+            foreach (Process p in Process.GetProcesses().Where(x => x.ProcessName.Equals("uninst", StringComparison.OrdinalIgnoreCase)).ToList())
             {
                 try
                 {
-                    Directory.Delete(kingsoftLocalPath, true);
+                    string exePath = p.MainModule?.FileName ?? "";
+                    if (exePath.StartsWith(kingsoftLocalPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Logger.Info("Stopping WPS uninstaller still running: " + exePath);
+                        p.Kill();
+                        p.WaitForExit(2000);
+                    }
+                }
+                catch { }
+            }
+            System.Threading.Thread.Sleep(300);
+
+            const int MaxRetries = 3;
+            int failed = 0;
+            for (int attempt = 1; attempt <= MaxRetries; attempt++)
+            {
+                failed = DeleteTreeForce(kingsoftLocalPath);
+                if (failed == 0 && !Directory.Exists(kingsoftLocalPath))
+                {
+                    Logger.Info("Local Kingsoft data deleted: " + kingsoftLocalPath);
                     txtcheck.Text = "Local data deleted successfully.";
-                    return;
+                    return true;
                 }
-                catch (IOException)
+
+                Logger.Warn("Delete Kingsoft local data attempt " + attempt + "/" + MaxRetries + ": " + failed + " item(s) left");
+                if (attempt < MaxRetries)
                 {
-                    if (attempt < MaxRetries)
-                    {
-                        txtcheck.Text = $"Retrying ({attempt}/{MaxRetries}): file is locked...";
-                        System.Threading.Thread.Sleep(800);
-                    }
-                    else
-                    {
-                        txtcheck.Text = $"I/O Error: Unable to delete. File may be locked. Request admin rights for cleanup button.";
-                        return;
-                    }
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    txtcheck.Text = "Access denied. Will need admin rights for full cleanup.";
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    txtcheck.Text = $"Error: {ex.Message}";
-                    return;
+                    txtcheck.Text = $"Retrying ({attempt}/{MaxRetries}): some files are locked...";
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(800);
                 }
             }
+
+            // Typical leftover: WPS shell-extension DLLs (qingshellext64.dll_d_*, kbaseconfigcenter64.dll_d_*) mapped into explorer.exe.
+            if (Directory.Exists(kingsoftLocalPath))
+            {
+                DialogResult dr = MessageBox.Show(
+                    "Some WPS files are locked by Windows Explorer (WPS shell extension). Restart Windows Explorer to release them? The taskbar will disappear for a few seconds.",
+                    "Files in use", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (dr == DialogResult.Yes && RestartExplorerAndDelete(kingsoftLocalPath))
+                {
+                    txtcheck.Text = "Local data deleted successfully (Explorer restarted).";
+                    return true;
+                }
+            }
+
+            txtcheck.Text = "Some local data could not be deleted (files locked or access denied). See log.";
+            return false;
         }
-        private void btncleanup_Click_1(object sender, EventArgs e)
+        private async void btncleanup_Click_1(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(txtdirect.Text))
             {
@@ -310,47 +483,74 @@ namespace frmwpsoffice
 
             if (result != DialogResult.Yes) return;
 
-            CleanWPSResidualFiles();
-            string localStatus = txtcheck.Text;
-
-            bool roamingSuccess = CleanWPSRoamingData();
-
-            if (roamingSuccess)
+            btncleanup.Enabled = false;
+            btnuninstall.Enabled = false;
+            try
             {
-                txtcheck.Text = "All cleanup completed!";
+                bool localSuccess = CleanWPSResidualFiles();
 
-                try
+                bool roamingSuccess = CleanWPSRoamingData();
+                if (!roamingSuccess)
                 {
-                    RunEmbeddedBatchFile("frmwpsoffice.blockwps.bat");
-                    // Make sure the Local Group Policy Editor exists (Windows Home) so the block policy can be reviewed/managed.
-                    RunEmbeddedBatchFile("frmwpsoffice.enablegpedit.bat");
-                    MessageBox.Show("Cleanup and blocking completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch
-                {
-                    MessageBox.Show("Cleanup completed but could not run block script.", "Partial Success", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    txtcheck.Text += "\nWarning: Some data could not be cleaned.";
+                    return;
                 }
 
-                Application.Exit();
+                txtcheck.Text = "Cleanup done. Applying WPS block...";
+
+                // Pass the real user's SID so the per-user policy is written to the right hive even if UAC elevates another admin account.
+                string sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+                int blockCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.blockwps.bat", $"/silent {sid}");
+
+                txtcheck.Text = "Enabling Group Policy Editor...";
+                // Make sure the Local Group Policy Editor exists (Windows Home) so the block policy can be reviewed/managed.
+                int gpCode = await RunEmbeddedBatchFileAsync("frmwpsoffice.enablegpedit.bat", "/silent");
+                Logger.Info("Scripts finished: blockwps=" + blockCode + " enablegpedit=" + gpCode);
+
+                string blockMsg = blockCode == 0 ? "OK - WPS is blocked (restart the computer to fully apply)"
+                    : blockCode == -2 ? "Skipped - administrator permission was denied"
+                    : "FAILED - some block entries could not be written";
+                string gpMsg = gpCode == 0 ? "OK - gpedit.msc is available"
+                    : gpCode == 2 ? "Restart the computer, then check gpedit.msc again"
+                    : gpCode == -2 ? "Skipped - administrator permission was denied"
+                    : "FAILED - this Windows edition may not support gpedit.msc (blocking still works)";
+
+                bool allOk = localSuccess && blockCode == 0 && gpCode == 0;
+                txtcheck.Text = allOk ? "All cleanup completed!" : "Cleanup completed with warnings.";
+                MessageBox.Show(
+                    "Local data cleanup: " + (localSuccess ? "OK" : "INCOMPLETE - some files were locked or access was denied (see log)") + "\nWPS block: " + blockMsg + "\nGroup Policy Editor: " + gpMsg,
+                    allOk ? "Success" : "Completed with warnings",
+                    MessageBoxButtons.OK,
+                    allOk ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                Close();
             }
-            else
+            finally
             {
-                txtcheck.Text += "\nWarning: Some data could not be cleaned.";
+                if (!IsDisposed)
+                {
+                    btncleanup.Enabled = true;
+                    btnuninstall.Enabled = true;
+                }
             }
         }
 
-        public static void RunEmbeddedBatchFile(string resourceName, string arguments = "")
+        /// <summary>
+        /// Extracts an embedded batch file to a unique temp file, runs it elevated and waits for it.
+        /// Returns the script exit code, -1 on internal error, -2 when the UAC prompt was declined.
+        /// </summary>
+        public static async Task<int> RunEmbeddedBatchFileAsync(string resourceName, string arguments = "")
         {
-            Assembly assembly = Assembly.GetExecutingAssembly();
-            string tempFilePath = Path.Combine(Path.GetTempPath(), Path.GetFileName(resourceName));
+            string tempFilePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".bat");
+            string wrapperPath = Path.ChangeExtension(tempFilePath, ".run.bat");
+            string scriptLogPath = Path.ChangeExtension(tempFilePath, ".log");
             try
             {
-                using (Stream stream = assembly.GetManifestResourceStream(resourceName))
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
                 {
                     if (stream == null)
                     {
                         MessageBox.Show($"Embedded resource not found: {resourceName}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
+                        return -1;
                     }
                     using (FileStream fileStream = File.Create(tempFilePath))
                     {
@@ -358,18 +558,55 @@ namespace frmwpsoffice
                     }
                 }
 
+                // Run through a tiny wrapper so the script's output ends up in a file we can copy into the app log.
+                File.WriteAllText(wrapperPath,
+                    "@echo off\r\ncall \"" + tempFilePath + "\" " + arguments + " > \"" + scriptLogPath + "\" 2>&1\r\nexit /b %ERRORLEVEL%\r\n",
+                    Encoding.Default);
+                Logger.Info("Running " + resourceName + " " + arguments);
+
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
-                    FileName = tempFilePath,
-                    Arguments = arguments,
+                    FileName = wrapperPath,
                     UseShellExecute = true,
-                    Verb = "runas"
+                    Verb = "runas",
+                    WindowStyle = ProcessWindowStyle.Hidden
                 };
-                Process.Start(startInfo);
+
+                return await Task.Run(() =>
+                {
+                    using (Process p = Process.Start(startInfo))
+                    {
+                        if (p == null) return -1;
+                        p.WaitForExit();
+                        return p.ExitCode;
+                    }
+                });
+            }
+            catch (Win32Exception wex) when (wex.NativeErrorCode == 1223)
+            {
+                Logger.Warn("UAC declined for " + resourceName);
+                return -2; // user cancelled UAC
             }
             catch (Exception ex)
             {
+                Logger.Error("Error running " + resourceName, ex);
                 MessageBox.Show("Error running batch file: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return -1;
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(scriptLogPath))
+                    {
+                        foreach (string line in File.ReadAllLines(scriptLogPath, Encoding.Default))
+                            if (line.Trim().Length > 0 && !line.StartsWith("====")) Logger.Info("  [script] " + line.Trim());
+                    }
+                }
+                catch { }
+                try { File.Delete(tempFilePath); } catch { }
+                try { File.Delete(wrapperPath); } catch { }
+                try { File.Delete(scriptLogPath); } catch { }
             }
         }
     }

@@ -41,6 +41,8 @@
             this.txtcheck = new System.Windows.Forms.TextBox();
             this.lblcheck = new System.Windows.Forms.Label();
             this.linkupdate = new System.Windows.Forms.LinkLabel();
+            this.linklog = new System.Windows.Forms.LinkLabel();
+            this.linkunblock = new System.Windows.Forms.LinkLabel();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.groupBox3.SuspendLayout();
@@ -175,12 +177,38 @@
             this.linkupdate.Text = "Check for updates";
             this.linkupdate.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.linkupdate_LinkClicked);
             // 
+            // linklog
+            // 
+            this.linklog.AutoSize = true;
+            this.linklog.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.linklog.Location = new System.Drawing.Point(335, 382);
+            this.linklog.Name = "linklog";
+            this.linklog.Size = new System.Drawing.Size(56, 15);
+            this.linklog.TabIndex = 3;
+            this.linklog.TabStop = true;
+            this.linklog.Text = "Open log";
+            this.linklog.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.linklog_LinkClicked);
+            //
+            // linkunblock
+            //
+            this.linkunblock.AutoSize = true;
+            this.linkunblock.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.linkunblock.Location = new System.Drawing.Point(222, 382);
+            this.linkunblock.Name = "linkunblock";
+            this.linkunblock.Size = new System.Drawing.Size(77, 15);
+            this.linkunblock.TabIndex = 4;
+            this.linkunblock.TabStop = true;
+            this.linkunblock.Text = "Unblock WPS";
+            this.linkunblock.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.linkunblock_LinkClicked);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(404, 401);
             this.Controls.Add(this.linkupdate);
+            this.Controls.Add(this.linklog);
+            this.Controls.Add(this.linkunblock);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
@@ -218,6 +246,8 @@
         private System.Windows.Forms.Button btncleanup;
         private System.Windows.Forms.Button btnuninstall;
         private System.Windows.Forms.LinkLabel linkupdate;
+        private System.Windows.Forms.LinkLabel linklog;
+        private System.Windows.Forms.LinkLabel linkunblock;
     }
 }
 
