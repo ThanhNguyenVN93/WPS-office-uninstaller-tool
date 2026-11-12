@@ -104,6 +104,25 @@ msbuild frmwpsoffice.csproj /p:Configuration=Release
 
 Visual Studio 2022 or Build Tools with the .NET Framework 4.8 targeting pack is required. GitHub Actions builds every push and pull request.
 
+### Releasing
+
+Releases are built and published by GitHub Actions (`.github/workflows/release.yml`):
+
+1. Set `AssemblyVersion` and `AssemblyFileVersion` in `Properties/AssemblyInfo.cs` to `X.Y.Z.0`.
+2. Write the release notes in `release-notes/vX.Y.Z.md`. They are shown on the release page and in the app's *What's new* window.
+3. Merge to `master`, then push the tag:
+
+```bash
+git tag vX.Y.Z origin/master && git push origin vX.Y.Z
+```
+
+The workflow then:
+- checks that the version and the notes match the tag;
+- builds the exe and creates `SHA256SUMS.txt` for the auto-updater;
+- publishes the release with the exe, `SHA256SUMS.txt` and `README.md`.
+
+To test without publishing, run the workflow by hand (*Actions > Release > Run workflow*). It runs the same build and checks, and keeps the files as a workflow artifact.
+
 ## 🤝 Support and contributing
 
 - Found a bug? Open an [Issue](https://github.com/ThanhNguyenVN93/WPS-office-uninstaller-tool/issues) and attach the log from **Open log**.

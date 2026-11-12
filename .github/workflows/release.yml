@@ -1,0 +1,101 @@
+name: Release
+
+# Push a tag "vX.Y.Z" -> build the exe, check the version, publish the GitHub release
+# (exe + SHA256SUMS.txt for the in-app updater + README.md, notes from release-notes/vX.Y.Z.md).
+# "Run workflow" by hand = dry run: same build and checks, files kept as a workflow artifact, nothing published.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to check, e.g. 1.6.1 (dry run only, nothing is published)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      EXE_NAME: WPS.OFFICE.UNINSTALLER.TOOL.exe
+      BUILD_EXE: bin\Release\WPS OFFICE UNINSTALLER TOOL.exe
+      FX_REF: C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Resolve version
+        id: v
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'push') { $ver = '${{ github.ref_name }}'.TrimStart('v'); $dry = 'false' }
+          else { $ver = '${{ inputs.version }}'.TrimStart('v'); $dry = 'true' }
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$ver' is not X.Y.Z" }
+          "version=$ver" >> $env:GITHUB_OUTPUT
+          "tag=v$ver" >> $env:GITHUB_OUTPUT
+          "dry=$dry" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $ver (dry run: $dry)"
+
+      - name: Check AssemblyInfo and release notes
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.v.outputs.version }}'
+          $info = Get-Content Properties\AssemblyInfo.cs -Raw
+          foreach ($attr in 'AssemblyVersion', 'AssemblyFileVersion') {
+            if ($info -notmatch "\[assembly: $attr\(`"$([regex]::Escape($ver)).0`"\)\]") {
+              throw "$attr in Properties\AssemblyInfo.cs is not $ver.0 - bump it before tagging (the in-app updater rejects a mismatch)."
+            }
+          }
+          $notes = "release-notes\v$ver.md"
+          if (-not (Test-Path $notes) -or -not (Get-Content $notes -Raw).Trim()) { throw "Missing or empty $notes" }
+
+      - name: Check embedded resources exist
+        shell: pwsh
+        run: |
+          # The release must contain the real files (CI may build with placeholders, a release must not).
+          $xml = [xml](Get-Content frmwpsoffice.csproj -Raw)
+          $missing = @($xml.Project.ItemGroup.EmbeddedResource | ForEach-Object { $_.Include } | Where-Object { $_ -and -not (Test-Path $_) })
+          if ($missing.Count) { throw "Missing embedded resources: $($missing -join ', ')" }
+
+      - name: Build
+        shell: pwsh
+        run: |
+          msbuild frmwpsoffice.csproj /restore /p:Configuration=Release /p:FrameworkPathOverride="$env:FX_REF" /v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package and verify
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.v.outputs.version }}'
+          New-Item -ItemType Directory dist -Force | Out-Null
+          Copy-Item $env:BUILD_EXE "dist\$env:EXE_NAME"
+          $fv = (Get-Item "dist\$env:EXE_NAME").VersionInfo.FileVersion
+          if ($fv -ne "$ver.0") { throw "Built exe FileVersion is $fv, expected $ver.0" }
+          $hash = (Get-FileHash "dist\$env:EXE_NAME" -Algorithm SHA256).Hash.ToLowerInvariant()
+          # Same format the updater parses: "<sha256>  <file name>" + LF.
+          [IO.File]::WriteAllText("$PWD\dist\SHA256SUMS.txt", "$hash  $env:EXE_NAME`n")
+          Copy-Item README.md dist\README.md
+          Get-ChildItem dist | Format-Table Name, Length
+          Get-Content dist\SHA256SUMS.txt
+
+      - name: Upload files (dry run)
+        if: steps.v.outputs.dry == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.v.outputs.tag }}-dryrun
+          path: dist/
+
+      - name: Publish GitHub release
+        if: steps.v.outputs.dry == 'false'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ steps.v.outputs.tag }}'
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "Release $tag already exists - delete it or use a new version." }
+          gh release create $tag --verify-tag --title $tag --notes-file "release-notes\$tag.md" --latest `
+            "dist\$env:EXE_NAME" dist\SHA256SUMS.txt dist\README.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
