@@ -25,6 +25,8 @@ It is handy when WPS keeps coming back, when a reinstall fails because of leftov
 - Runs the WPS uninstaller (per-user and Program Files installs, including the older `Kingsoft\WPS Office` layout).
 - Cleans residual data: `%LocalAppData%\Kingsoft`, `%AppData%\kingsoft`, `%ProgramData%\kingsoft`, `%ProgramData%\WPS` and any leftover `Program Files\WPS Office`. Your **WPS Cloud document folders are never touched**.
 - Handles read-only files and files locked by Explorer.
+- **Restores file associations (v1.6.0+)**, part of CLEAN UP: if Microsoft Office is installed, `.doc/.docx/.xls/.xlsx/.ppt/.pptx/...` point to Office again (icons + double-click). Without Office, WPS's associations are removed so Windows is back to its own state. Fallback when something is still wrong: Office Quick Repair (Click-to-Run), or a per-user fix when admin permission is denied.
+- **Removes WPS leftovers (v1.6.0+)** the uninstaller keeps: scheduled tasks, autostart entries, the "WPS Cloud" item in Explorer, WPS context-menu handlers / overlay icons, WPS services and orphaned "Programs and Features" entries (matched by their Kingsoft/WPS program path).
 - **Blocks reinstalling WPS** (layers, see below).
 - Enables the Local Group Policy Editor (`gpedit.msc`) on Windows Home.
 - Result summary after CLEAN UP, single running instance, local log file.
