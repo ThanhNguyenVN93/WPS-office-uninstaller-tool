@@ -69,6 +69,10 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Logger.cs" />
+    <Compile Include="WpsTraces.cs" />
+    <Compile Include="FileAssocRestorer.cs" />
+    <Compile Include="WpsLeftoverCleaner.cs" />
+    <Compile Include="SystemRepair.cs" />
     <Compile Include="DonateForm.cs">
       <SubType>Form</SubType>
     </Compile>

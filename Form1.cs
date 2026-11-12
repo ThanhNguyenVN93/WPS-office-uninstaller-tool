@@ -567,6 +567,17 @@ namespace frmwpsoffice
                     return;
                 }
 
+                // Give the Office file types back (or clear WPS's associations) and remove leftover tasks/autostart/shell items.
+                txtcheck.Text = "Restoring file associations and removing WPS leftovers...";
+                SystemRepairResult repair = await SystemRepair.RunAsync();
+                if (IsDisposed) return;
+                string repairFallback = SystemRepair.OfferFallback(this, repair);
+                bool repairOk = repair.StillBroken.Count == 0 && repair.MachinePartRan;
+                string repairMsg = (repair.MachinePartRan ? "" : "PARTIAL - administrator permission was denied, only your user was fixed. ")
+                    + (repair.OfficeTypes > 0 ? repair.OfficeTypes + " Office file types open with Microsoft Office" : "WPS associations removed (Microsoft Office not installed)")
+                    + (repair.Changed > 0 ? ", " + repair.Changed + " item(s) fixed" : ", nothing to fix")
+                    + (repairFallback != null ? " - " + repairFallback : "");
+
                 txtcheck.Text = "Cleanup done. Applying WPS block...";
 
                 // Pass the real user's SID so the per-user policy is written to the right hive even if UAC elevates another admin account.
@@ -586,10 +597,12 @@ namespace frmwpsoffice
                     : gpCode == -2 ? "Skipped - administrator permission was denied"
                     : "FAILED - this Windows edition may not support gpedit.msc (blocking still works)";
 
-                bool allOk = localSuccess && blockCode == 0 && gpCode == 0;
+                bool allOk = localSuccess && repairOk && blockCode == 0 && gpCode == 0;
                 txtcheck.Text = allOk ? "All cleanup completed!" : "Cleanup completed with warnings.";
                 MessageBox.Show(
-                    "Local data cleanup: " + (localSuccess ? "OK" : "INCOMPLETE - some files were locked or access was denied (see log)") + "\nWPS block: " + blockMsg + "\nGroup Policy Editor: " + gpMsg,
+                    "Local data cleanup: " + (localSuccess ? "OK" : "INCOMPLETE - some files were locked or access was denied (see log)") +
+                    "\nFile associations & leftovers: " + (repairOk ? "OK - " : "") + repairMsg +
+                    "\nWPS block: " + blockMsg + "\nGroup Policy Editor: " + gpMsg,
                     allOk ? "Success" : "Completed with warnings",
                     MessageBoxButtons.OK,
                     allOk ? MessageBoxIcon.Information : MessageBoxIcon.Warning);

@@ -24,6 +24,13 @@ namespace frmwpsoffice
                 return;
             }
 
+            // Elevated helper for CLEAN UP: restore file associations + remove WPS leftovers (no UI).
+            if (args.Length >= 2 && args[0] == SystemRepair.ElevatedArg)
+            {
+                Environment.Exit(SystemRepair.RunElevatedChild(args[1]));
+                return;
+            }
+
             // Single instance: a second launch just brings the running window to the front.
             bool createdNew;
             Mutex mutex = null;
